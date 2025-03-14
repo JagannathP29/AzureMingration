@@ -57,13 +57,9 @@ class Program
                             }
                         }
                     }
-                    else if (record.Type.Equals("Feature", StringComparison.OrdinalIgnoreCase))
+                    else if (record.Type.Equals("Feature", StringComparison.OrdinalIgnoreCase) || record.Type.Equals("Bug", StringComparison.OrdinalIgnoreCase))
                     {
                         features.Add(record);
-                    }
-                    else if (record.Type.Equals("Bug", StringComparison.OrdinalIgnoreCase))
-                    {
-                        bugs.Add(record);
                     }
                     else if (record.Type.Equals("Release", StringComparison.OrdinalIgnoreCase))
                     {
@@ -108,23 +104,6 @@ class Program
                     else
                     {
                         Console.WriteLine($"❌ [WARNING] No matching Epic found for feature '{feature.Title}' (Label: '{featureLabel}').");
-                    }
-                }
-
-                // Step 3: Create Bugs (User Story)
-                foreach (var bug in bugs)
-                {
-                    string bugLabel = Normalize(bug.Labels);
-
-                    Console.WriteLine($"Checking feature '{bug.Title}' with label '{bugLabel}'...");
-
-                    string bugId = await CreateWorkItem(client, organization, project, "User Story", bug.Id, bug.Title, bug.Description, bug.Priority, bug.CurrentState, bug.Comment, bug.AcceptedAt, bug.Deadline, bug.CreatedAt, bug.Estimate);
-                    if (!string.IsNullOrEmpty(bugId))
-                    {
-                        Console.WriteLine($"✅ Bug(User Story) '{bug.Title}' created.");
-
-                        //Attach Files from"
-                        await ProcessAttachments(client, organization, project, bugId, bug.Id, @"D:\1 Tickets");
                     }
                 }
 
