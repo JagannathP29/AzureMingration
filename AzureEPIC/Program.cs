@@ -402,49 +402,6 @@ class Program
 
     #region Update State
 
-    //static async Task UpdateParentState(HttpClient client, string organization, string project, string parentId)
-    //{
-    //    string url = $"https://dev.azure.com/{organization}/{project}/_apis/wit/workitems/{parentId}?$expand=relations&api-version=7.1";
-    //    HttpResponseMessage response = await client.GetAsync(url);
-
-    //    if (!response.IsSuccessStatusCode)
-    //    {
-    //        Console.WriteLine($"❌ [ERROR] Failed to fetch parent work item {parentId}. Status: {response.StatusCode}");
-    //        return;
-    //    }
-
-    //    string responseBody = await response.Content.ReadAsStringAsync();
-    //    JsonDocument json = JsonDocument.Parse(responseBody);
-
-    //    if (!json.RootElement.TryGetProperty("relations", out JsonElement relations))
-    //    {
-    //        Console.WriteLine($"[INFO] Work item {parentId} has no child items.");
-    //        return;
-    //    }
-
-    //    bool allChildrenClosed = true;
-    //    foreach (var relation in relations.EnumerateArray())
-    //    {
-    //        if (relation.GetProperty("rel").GetString() == "System.LinkTypes.Hierarchy-Forward")
-    //        {
-    //            string childUrl = relation.GetProperty("url").GetString();
-    //            string childId = childUrl.Split('/').Last();
-
-    //            string childState = await GetWorkItemState(client, organization, project, childId);
-    //            if (childState != "Closed")
-    //            {
-    //                allChildrenClosed = false;
-    //                break;
-    //            }
-    //        }
-    //    }
-
-    //    if (allChildrenClosed)
-    //    {
-    //        await UpdateWorkItemState(client, organization, project, parentId, "Closed");
-    //    }
-    //}
-
     static async Task UpdateParentState(HttpClient client, string organization, string project, string parentId)
     {
         string url = $"https://dev.azure.com/{organization}/{project}/_apis/wit/workitems/{parentId}?$expand=relations&api-version=7.1";
