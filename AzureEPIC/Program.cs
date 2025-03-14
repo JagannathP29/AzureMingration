@@ -12,7 +12,7 @@ class Program
         string organization = "CirruscloudSystems";
         string project = "Test";
         string pat = "FChclBho8h2zKK9z8JbEMjxyiOnVLh09TcbcrLvY8oUj7lBQGhYoJQQJ99BCACAAAAAbOY6VAAASAZDO15Am";
-        string csvFilePath = @"D:\Dose.csv";
+        string csvFilePath = @"D:\TestAzure.csv";
 
         var epics = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase); // Store Epic ID mapping
         var features = new List<WorkItem>(); //(Creates as UserStory of Epic(Feature) - Parent)
@@ -32,7 +32,7 @@ class Program
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic",
                     Convert.ToBase64String(Encoding.ASCII.GetBytes($":{pat}")));
 
-                // Step 1: Create Epics
+                // Step 1: Create Epics(Actually Feature in Azure DevOps)
                 foreach (var record in records)
                 {
                     if (record.Type.Equals("Epic", StringComparison.OrdinalIgnoreCase))
@@ -133,15 +133,30 @@ class Program
                 {
                     string releaseLabel = Normalize(release.Labels);
 
-                    Console.WriteLine($"Checking feature '{release.Title}' with label '{releaseLabel}'...");
-
-                    string releaseId = await CreateWorkItem(client, organization, project, "User Story", release.Id, release.Title, release.Description, release.Priority, release.CurrentState, release.Comment, release.AcceptedAt, release.Deadline, release.CreatedAt, release.Estimate);
-                    if (!string.IsNullOrEmpty(releaseId))
+                    if (!string.IsNullOrEmpty(releaseLabel))
                     {
-                        Console.WriteLine($"✅ Bug(User Story) '{release.Title}' created.");
+                        if (epics.TryGetValue(releaseLabel, out string epicId))
+                        {
+                            Console.WriteLine($"✅ Matched Epic(Feature) for '{release.Title}': EpicID(FeatureID) = {epicId}");
 
-                        //Attach Files from"
-                        await ProcessAttachments(client, organization, project, releaseId, release.Id, @"D:\1 Tickets");
+                            if (await WorkItemExists(client, organization, project, release.Title))
+                            {
+                                Console.WriteLine($"[INFO] Feature(User Story) '{release.Title}' already exists. Skipping creation.");
+                            }
+                            else
+                            {
+                                Console.WriteLine($"Checking feature '{release.Title}' with label '{releaseLabel}'...");
+
+                                string releaseId = await CreateWorkItem(client, organization, project, "Release", release.Id, release.Title, release.Description, release.Priority, release.CurrentState, release.Comment, release.AcceptedAt, release.Deadline, release.CreatedAt, release.Estimate, epicId);
+                                if (!string.IsNullOrEmpty(releaseId))
+                                {
+                                    Console.WriteLine($"✅ Bug(User Story) '{release.Title}' created.");
+
+                                    //Attach Files from"
+                                    await ProcessAttachments(client, organization, project, releaseId, release.Id, @"D:\1 Tickets");
+                                }
+                            }
+                        }
                     }
                 }
 
