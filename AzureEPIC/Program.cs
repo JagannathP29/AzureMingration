@@ -107,7 +107,7 @@ class Program
                     }
                 }
 
-                // Step 4: Create Releases (User Story)
+                // Step 3: Create Releases (User Story)
                 foreach (var release in releases)
                 {
                     string releaseLabel = Normalize(release.Labels);
@@ -139,7 +139,7 @@ class Program
                     }
                 }
 
-                // Step 5: Create Chores (User Story) under a Single feature(Titled as "Parent Chore Feature") and linked all chore to that feature - "Parent Chore Feature"
+                // Step 4: Create Chores (User Story) under a Single feature(Titled as "Parent Chore Feature") and linked all chore to that feature - "Parent Chore Feature"
                 if (chores.Any())
                 {
                     string parentChoreTitle = "Parent Chore Feature";
