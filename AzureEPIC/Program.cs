@@ -53,7 +53,7 @@ class Program
                                 Console.WriteLine($"✅ Work Item '{record.Title}' created.");
 
                                 //Attach Files from"
-                                await ProcessAttachments(client, organization, project, epicId, record.Id, @"D:\1 Tickets");
+                                await ProcessAttachments(client, organization, project, epicId, record.Id, @"D:\1 Tickets"); // Folder Name to attach files based on TicketID
                             }
                         }
                     }
