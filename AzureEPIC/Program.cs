@@ -187,11 +187,13 @@ class Program
 
         if (!string.IsNullOrEmpty(description))
         {
+            string htmlDescription = $"<div>{description.Replace("\n", "<br>")}</div>";
+
             workItem.Add(new
             {
                 op = "add",
                 path = "/fields/System.Description",
-                value = description
+                value = htmlDescription
             });
         }
 
