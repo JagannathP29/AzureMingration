@@ -71,8 +71,9 @@ class Program
             using (var client = new HttpClient())
             {
                 client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json-patch+json"));
-                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic",
-                    Convert.ToBase64String(Encoding.ASCII.GetBytes($":{pat}")));
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.ASCII.GetBytes($":{pat}")));
+                
+                List<string> azureIds = await GetAzurePTStoryValues(client, organization, project);
 
                 // Step 1: Create Epics(Actually Feature in Azure DevOps)
                 records = records.OrderBy(f => f.CreatedAt).ToList();
@@ -82,9 +83,9 @@ class Program
                     {
                         string normalizedTitle = Normalize(record.Title);
 
-                        if (await WorkItemExists(client, organization, project, normalizedTitle))
+                        if (azureIds.Contains(record.Id))
                         {
-                            Console.WriteLine($"[INFO] Epic '{normalizedTitle}' already exists. Skipping creation.");
+                            Console.WriteLine($"[INFO] ID {record.Id} already exists in Azure DevOps as a PT Story. Skipping creation.");
                         }
                         else
                         {
@@ -94,7 +95,7 @@ class Program
                                 epics[normalizedTitle] = epicId;
 
                                 Console.WriteLine($"✅ Work Item '{record.Title}' created.");
-                                
+
                                 //Attach Files from"
                                 await ProcessAttachments(client, organization, project, epicId, record.Id, attachmentPath);
                             }
@@ -128,9 +129,9 @@ class Program
                         {
                             Console.WriteLine($"✅ Matched Epic(Feature) for '{feature.Title}': EpicID(FeatureID) = {epicId}");
 
-                            if (await WorkItemExists(client, organization, project, feature.Title))
+                            if (azureIds.Contains(feature.Id))
                             {
-                                Console.WriteLine($"[INFO] Feature(User Story) '{feature.Title}' already exists. Skipping creation.");
+                                Console.WriteLine($"[INFO] ID {feature.Id} already exists in Azure DevOps as a PT Story. Skipping creation.");
                             }
                             else
                             {
@@ -161,9 +162,9 @@ class Program
                         {
                             Console.WriteLine($"✅ Matched Epic(Feature) for '{release.Title}': EpicID(FeatureID) = {epicId}");
 
-                            if (await WorkItemExists(client, organization, project, release.Title))
+                            if (azureIds.Contains(release.Id))
                             {
-                                Console.WriteLine($"[INFO] Feature(User Story) '{release.Title}' already exists. Skipping creation.");
+                                Console.WriteLine($"[INFO] ID {release.Id} already exists in Azure DevOps as a PT Story. Skipping creation.");
                             }
                             else
                             {
@@ -185,7 +186,7 @@ class Program
                 {
                     string parentChoreTitle = "Parent Chore Feature";
 
-                    if (!await WorkItemExists(client, organization, project, parentChoreTitle))
+                    if (!await ParentChoreFeaturexists(client, organization, project, parentChoreTitle))
                     {
                         choreFeatureId = await CreateWorkItem(client, organization, project, "Feature", "1", parentChoreTitle, "This is a parent feature for all Chores.");
                         Console.WriteLine($"✅ Created Parent Chore Feature with ID: {choreFeatureId}");
@@ -202,11 +203,18 @@ class Program
                 {
                     if (choreFeatureId != null)
                     {
-                        string choreId = await CreateWorkItem(client, organization, project, "User Story", chore.Id, chore.Title, chore.Description, chore.Priority, chore.CurrentState, chore.Comments, chore.AcceptedAt, chore.Deadline, chore.CreatedAt, chore.Estimate, choreFeatureId);
-                        if (!string.IsNullOrEmpty(choreId))
+                        if (azureIds.Contains(chore.Id))
                         {
-                            Console.WriteLine($"✅ Chore (User Story) '{chore.Title}' created under Parent Chore Feature.");
-                            await ProcessAttachments(client, organization, project, choreId, chore.Id, attachmentPath);
+                            Console.WriteLine($"[INFO] ID {chore.Id} already exists in Azure DevOps as a PT Story. Skipping creation.");
+                        }
+                        else
+                        {
+                            string choreId = await CreateWorkItem(client, organization, project, "User Story", chore.Id, chore.Title, chore.Description, chore.Priority, chore.CurrentState, chore.Comments, chore.AcceptedAt, chore.Deadline, chore.CreatedAt, chore.Estimate, choreFeatureId);
+                            if (!string.IsNullOrEmpty(choreId))
+                            {
+                                Console.WriteLine($"✅ Chore (User Story) '{chore.Title}' created under Parent Chore Feature.");
+                                await ProcessAttachments(client, organization, project, choreId, chore.Id, attachmentPath);
+                            }
                         }
                     }
                 }
@@ -313,7 +321,7 @@ class Program
 
     #region GET Workitems and CheckExists
 
-    static async Task<bool> WorkItemExists(HttpClient client, string organization, string project, string title)
+    static async Task<bool> ParentChoreFeaturexists(HttpClient client, string organization, string project, string title)
     {
         string url = $"https://dev.azure.com/{organization}/{project}/_apis/wit/wiql?api-version=7.1";
 
@@ -358,6 +366,71 @@ class Program
         }
 
         Console.WriteLine($"[INFO] Work item '{title}' not found.");
+        return null;
+    }
+
+    static async Task<List<string>> GetAzurePTStoryValues(HttpClient client, string organization, string project)
+    {
+        List<string> ptStoryValues = new List<string>();
+        string url = $"https://dev.azure.com/{organization}/{project}/_apis/wit/wiql?api-version=7.1";
+
+        var query = new
+        {
+            query = "SELECT * FROM WorkItems"
+        };
+
+        var content = new StringContent(JsonSerializer.Serialize(query), Encoding.UTF8, "application/json");
+        HttpResponseMessage response = await client.PostAsync(url, content);
+
+        if (response.IsSuccessStatusCode)
+        {
+            string responseBody = await response.Content.ReadAsStringAsync();
+            JsonDocument json = JsonDocument.Parse(responseBody);
+
+            if (json.RootElement.TryGetProperty("workItems", out JsonElement workItems))
+            {
+                foreach (var workItem in workItems.EnumerateArray())
+                {
+                    string workItemId = workItem.GetProperty("id").ToString();
+                    string ptStoryValue = await GetWorkItemField(client, organization, project, workItemId, "Custom.PTStory");
+
+                    if (!string.IsNullOrEmpty(ptStoryValue))
+                    {
+                        ptStoryValues.Add(ptStoryValue);
+                    }
+                }
+            }
+        }
+        else
+        {
+            Console.WriteLine($"[ERROR] Failed to fetch PT Story work items. Status Code: {response.StatusCode}");
+        }
+
+        return ptStoryValues;
+    }
+
+    static async Task<string> GetWorkItemField(HttpClient client, string organization, string project, string workItemId, string fieldName)
+    {
+        string url = $"https://dev.azure.com/{organization}/{project}/_apis/wit/workitems/{workItemId}?api-version=7.1";
+
+        HttpResponseMessage response = await client.GetAsync(url);
+
+        if (response.IsSuccessStatusCode)
+        {
+            string responseBody = await response.Content.ReadAsStringAsync();
+            JsonDocument json = JsonDocument.Parse(responseBody);
+
+            if (json.RootElement.TryGetProperty("fields", out JsonElement fields) &&
+                fields.TryGetProperty(fieldName, out JsonElement fieldValue))
+            {
+                return fieldValue.ToString();
+            }
+        }
+        else
+        {
+            Console.WriteLine($"[ERROR] Failed to fetch work item {workItemId}. Status Code: {response.StatusCode}");
+        }
+
         return null;
     }
 
@@ -648,7 +721,7 @@ class Program
 
 
     #region Configuration
-    
+
     static IConfiguration LoadConfiguration()
     {
         string projectRoot = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\.."));
