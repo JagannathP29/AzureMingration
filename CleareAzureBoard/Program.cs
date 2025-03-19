@@ -1,11 +1,7 @@
-﻿using Microsoft.Extensions.Configuration;
-using System;
-using System.Collections.Generic;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
+using System.Net.Http.Headers;
+using Microsoft.Extensions.Configuration;
 
 namespace CleareAzureBoard;
 
@@ -13,9 +9,6 @@ class Program
 {
     static async Task Main(string[] args)
     {
-        //string organization = "CirruscloudSystems";
-        //string project = "Test";
-        //string pat = "FChclBho8h2zKK9z8JbEMjxyiOnVLh09TcbcrLvY8oUj7lBQGhYoJQQJ99BCACAAAAAbOY6VAAASAZDO15Am";
         var config = LoadConfiguration();
         string organization = config["AzureDevOps:Organization"];
         string project = config["AzureDevOps:Project"];
