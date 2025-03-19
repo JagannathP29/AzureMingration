@@ -4,15 +4,19 @@ using System.Text.Json;
 using System.Globalization;
 using System.Net.Http.Headers;
 using System.Xml.Linq;
+using Microsoft.Extensions.Configuration;
+using AzureEPIC;
 
 class Program
 {
     static async Task Main()
     {
-        string organization = "CirruscloudSystems";
-        string project = "Test";
-        string pat = "FChclBho8h2zKK9z8JbEMjxyiOnVLh09TcbcrLvY8oUj7lBQGhYoJQQJ99BCACAAAAAbOY6VAAASAZDO15Am";
-        string csvFilePath = @"D:\TestAzure.csv";
+        var config = LoadConfiguration();
+        string organization = config["AzureDevOps:Organization"];
+        string project = config["AzureDevOps:Project"];
+        string pat = config["AzureDevOps:PersonalAccessToken"];
+        string csvFilePath = config["FilePaths:CsvFilePath"];
+        string attachmentPath = config["AttachmentSettings:AttachmentPath"];
 
         var epics = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase); // Store Epic ID mapping
         var features = new List<WorkItem>(); //(Creates as UserStory of Epic(Feature) - Parent)
@@ -24,7 +28,45 @@ class Program
         using (var reader = new StreamReader(csvFilePath))
         using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
         {
-            var records = csv.GetRecords<WorkItem>().ToList();
+            var records = new List<WorkItem>();
+
+            csv.Read();
+            csv.ReadHeader();
+            var headerRow = csv.HeaderRecord;
+
+            while (csv.Read())
+            {
+                var workItem = new WorkItem
+                {
+                    Id = csv.GetField("Id"),
+                    Title = csv.GetField("Title"),
+                    Labels = csv.GetField("Labels"),
+                    Type = csv.GetField("Type"),
+                    Description = csv.GetField("Description"),
+                    Estimate = csv.GetField<double?>("Estimate"),
+                    Priority = csv.GetField("Priority"),
+                    CurrentState = csv.GetField("CurrentState"),
+                    CreatedAt = csv.GetField<DateTime?>("CreatedAt"),
+                    AcceptedAt = csv.GetField<DateTime?>("AcceptedAt"),
+                    Deadline = csv.GetField<DateTime?>("Deadline"),
+
+                    Comments = new List<string>()
+                };
+
+                foreach (var column in headerRow)
+                {
+                    if (column.StartsWith("Comment"))
+                    {
+                        var commentValue = csv.GetField(column);
+                        if (!string.IsNullOrEmpty(commentValue))
+                        {
+                            workItem.Comments.Add(commentValue);
+                        }
+                    }
+                }
+
+                records.Add(workItem);
+            }
 
             using (var client = new HttpClient())
             {
@@ -45,15 +87,15 @@ class Program
                         }
                         else
                         {
-                            string epicId = await CreateWorkItem(client, organization, project, "Feature", record.Id, record.Title, record.Description, record.Priority, record.CurrentState, record.Comment, record.AcceptedAt, record.Deadline, record.CreatedAt, record.Estimate);
+                            string epicId = await CreateWorkItem(client, organization, project, "Feature", record.Id, record.Title, record.Description, record.Priority, record.CurrentState, record.Comments, record.AcceptedAt, record.Deadline, record.CreatedAt, record.Estimate);
                             if (!string.IsNullOrEmpty(epicId))
                             {
                                 epics[normalizedTitle] = epicId;
 
                                 Console.WriteLine($"✅ Work Item '{record.Title}' created.");
-
+                                
                                 //Attach Files from"
-                                await ProcessAttachments(client, organization, project, epicId, record.Id, @"D:\1 Tickets"); // Folder Name to attach files based on TicketID
+                                await ProcessAttachments(client, organization, project, epicId, record.Id, attachmentPath);
                             }
                         }
                     }
@@ -90,13 +132,13 @@ class Program
                             }
                             else
                             {
-                                string featureId = await CreateWorkItem(client, organization, project, "User Story", feature.Id, feature.Title, feature.Description, feature.Priority, feature.CurrentState, feature.Comment, feature.AcceptedAt, feature.Deadline, feature.CreatedAt, feature.Estimate, epicId);
+                                string featureId = await CreateWorkItem(client, organization, project, "User Story", feature.Id, feature.Title, feature.Description, feature.Priority, feature.CurrentState, feature.Comments, feature.AcceptedAt, feature.Deadline, feature.CreatedAt, feature.Estimate, epicId);
                                 if (!string.IsNullOrEmpty(feature.Id))
                                 {
                                     Console.WriteLine($"✅ Work Item '{feature.Title}' created.");
-
+                                    //await ProcessCommemnts(client, organization, project, featureId, feature.Comments);
                                     //Attach Files from"
-                                    await ProcessAttachments(client, organization, project, featureId, feature.Id, @"D:\1 Tickets");
+                                    await ProcessAttachments(client, organization, project, featureId, feature.Id, attachmentPath);
                                 }
                             }
                         }
@@ -126,13 +168,12 @@ class Program
                             {
                                 Console.WriteLine($"Checking feature '{release.Title}' with label '{releaseLabel}'...");
 
-                                string releaseId = await CreateWorkItem(client, organization, project, "Release", release.Id, release.Title, release.Description, release.Priority, release.CurrentState, release.Comment, release.AcceptedAt, release.Deadline, release.CreatedAt, release.Estimate, epicId);
+                                string releaseId = await CreateWorkItem(client, organization, project, "Release", release.Id, release.Title, release.Description, release.Priority, release.CurrentState, release.Comments, release.AcceptedAt, release.Deadline, release.CreatedAt, release.Estimate, epicId);
                                 if (!string.IsNullOrEmpty(releaseId))
                                 {
                                     Console.WriteLine($"✅ Bug(User Story) '{release.Title}' created.");
-
-                                    //Attach Files from"
-                                    await ProcessAttachments(client, organization, project, releaseId, release.Id, @"D:\1 Tickets");
+                                    //await ProcessCommemnts(client, organization, project, releaseId, release.Comments);
+                                    await ProcessAttachments(client, organization, project, releaseId, release.Id, attachmentPath);
                                 }
                             }
                         }
@@ -160,11 +201,12 @@ class Program
                 {
                     if (choreFeatureId != null)
                     {
-                        string choreId = await CreateWorkItem(client, organization, project, "User Story", chore.Id, chore.Title, chore.Description, chore.Priority, chore.CurrentState, chore.Comment, chore.AcceptedAt, chore.Deadline, chore.CreatedAt, chore.Estimate, choreFeatureId);
+                        string choreId = await CreateWorkItem(client, organization, project, "User Story", chore.Id, chore.Title, chore.Description, chore.Priority, chore.CurrentState, chore.Comments, chore.AcceptedAt, chore.Deadline, chore.CreatedAt, chore.Estimate, choreFeatureId);
                         if (!string.IsNullOrEmpty(choreId))
                         {
                             Console.WriteLine($"✅ Chore (User Story) '{chore.Title}' created under Parent Chore Feature.");
-                            await ProcessAttachments(client, organization, project, choreId, chore.Id, @"D:\1 Tickets");
+                            //await ProcessCommemnts(client, organization, project, choreId, chore.Comments);
+                            await ProcessAttachments(client, organization, project, choreId, chore.Id, attachmentPath);
                         }
                     }
                 }
@@ -175,7 +217,7 @@ class Program
 
     #region Create Workitems
 
-    static async Task<string> CreateWorkItem(HttpClient client, string organization, string project, string type, string? id, string title, string description, string priority = null, string currentState = null, string comment = null, DateTime? acceptedAt = null, DateTime? deadline = null, DateTime? createdAt = null, double? estimate = null, string parentId = null)
+    static async Task<string> CreateWorkItem(HttpClient client, string organization, string project, string type, string? id, string title, string description, string priority = null, string currentState = null, List<string> comments = null, DateTime? acceptedAt = null, DateTime? deadline = null, DateTime? createdAt = null, double? estimate = null, string parentId = null)
     {
         string url = $"https://dev.azure.com/{organization}/{project}/_apis/wit/workitems/${type}?api-version=7.1";
 
@@ -217,16 +259,6 @@ class Program
             });
         }
 
-        if (!string.IsNullOrEmpty(comment))
-        {
-            workItem.Add(new
-            {
-                op = "add",
-                path = "/fields/System.History",
-                value = comment
-            });
-        }
-
         if (estimate.HasValue)
         {
             workItem.Add(new { op = "add", path = "/fields/Microsoft.VSTS.Scheduling.Effort", value = estimate.Value });
@@ -251,6 +283,8 @@ class Program
             JsonDocument json = JsonDocument.Parse(responseBody);
             int responseId = json.RootElement.GetProperty("id").GetInt32();
             Console.WriteLine($"✅ {type} '{title}' created with ID: {responseId}");
+
+            await ProcessCommemnts(client, organization, project, responseId.ToString(), comments);
 
             // **Step 1: Update Work Item State**
             if (!string.IsNullOrEmpty(currentState))
@@ -329,7 +363,36 @@ class Program
     #endregion
 
 
-    #region Attach Attachments
+    #region Attach Comments & Attachments
+
+    static async Task ProcessCommemnts(HttpClient client, string organization, string project, string workItemId, List<string> comments)
+    {
+        string url = $"https://dev.azure.com/{organization}/{project}/_apis/wit/workitems/{workItemId}?api-version=7.1";
+
+        foreach (var comment in comments)
+        {
+            var patchData = new List<object>
+            {
+                new { op = "add", path = "/fields/System.History", value = comment }
+            };
+
+            var json = JsonSerializer.Serialize(patchData);
+            var content = new StringContent(json, Encoding.UTF8);
+            content.Headers.ContentType = new MediaTypeHeaderValue("application/json-patch+json");
+
+            HttpResponseMessage response = await client.PatchAsync(url, content);
+
+            if (response.IsSuccessStatusCode)
+            {
+                Console.WriteLine($"✅ Comment added to Work Item {workItemId}: {comment}");
+            }
+            else
+            {
+                string errorResponse = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"❌ Failed to add comment: {errorResponse}");
+            }
+        }
+    }
 
     static async Task ProcessAttachments(HttpClient client, string organization, string project, string pkId, string workItemId, string baseFolderPath)
     {
@@ -581,6 +644,20 @@ class Program
     }
 
     #endregion
+
+
+    #region Configuration
+    static IConfiguration LoadConfiguration()
+    {
+        string projectRoot = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\.."));
+
+        return new ConfigurationBuilder()
+        .SetBasePath(projectRoot)
+        .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+        .Build();
+    }
+
+    #endregion
 }
 
 
@@ -598,4 +675,5 @@ class WorkItem
     public DateTime? CreatedAt { get; set; }
     public DateTime? AcceptedAt { get; set; }
     public DateTime? Deadline { get; set; }
+    public List<string> Comments { get; set; } = new List<string>();
 }
