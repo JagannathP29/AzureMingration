@@ -225,11 +225,12 @@ class Program
         {
             new { op = "add", path = "/fields/System.Id", value = id },
             new { op = "add", path = "/fields/System.Title", value = title },
+            new { op = "add", path = "/fields/Custom.PTStory", value = id }
         };
 
         if (!string.IsNullOrEmpty(description))
         {
-            string htmlDescription = $"<div>{description.Replace("\n", "<br>")}</div>";
+            string htmlDescription = $"<pre><code>{System.Net.WebUtility.HtmlEncode(description)}</code></pre>";
 
             workItem.Add(new
             {
@@ -647,6 +648,7 @@ class Program
 
 
     #region Configuration
+    
     static IConfiguration LoadConfiguration()
     {
         string projectRoot = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\.."));
