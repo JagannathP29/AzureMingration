@@ -17,6 +17,7 @@ MAPPING from PivotalTracker to Azure DevOps
 -------------------------------------------
 
     Pivotal Tracker   ||    Azure DevOps
+    ------------------------------------
     Epic              ->    Feature
     Feature           ->    User Story
     Bug               ->    User Story
