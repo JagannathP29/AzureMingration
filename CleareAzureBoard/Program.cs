@@ -1,103 +1,106 @@
-﻿using System;
+﻿using Microsoft.Extensions.Configuration;
+using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 
-namespace AzureEPIC
+namespace CleareAzureBoard;
+
+class Program
 {
-    class Program
+    static async Task Main(string[] args)
     {
-        static async Task Main()
+        //string organization = "CirruscloudSystems";
+        //string project = "Test";
+        //string pat = "FChclBho8h2zKK9z8JbEMjxyiOnVLh09TcbcrLvY8oUj7lBQGhYoJQQJ99BCACAAAAAbOY6VAAASAZDO15Am";
+        var config = LoadConfiguration();
+        string organization = config["AzureDevOps:Organization"];
+        string project = config["AzureDevOps:Project"];
+        string pat = config["AzureDevOps:PersonalAccessToken"];
+
+        HttpClient client = new HttpClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic",
+            Convert.ToBase64String(Encoding.ASCII.GetBytes($":{pat}")));
+
+        List<string> workItemTypes = new List<string> {"Bug", "User Story", "Release", "Chore", "Feature", "Epic" };
+
+        foreach (var type in workItemTypes)
         {
-            string organization = "CirruscloudSystems";
-            string project = "Test";
-            string pat = "FChclBho8h2zKK9z8JbEMjxyiOnVLh09TcbcrLvY8oUj7lBQGhYoJQQJ99BCACAAAAAbOY6VAAASAZDO15Am";
-
-            var workItemTypesToDelete = new List<string> { "UserStory", "Release", "Bug", "Chore", "Feature", "Epic"};
-
-            using (var client = new HttpClient())
-            {
-                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic",
-                    Convert.ToBase64String(Encoding.ASCII.GetBytes($":{pat}")));
-
-                foreach (var workItemType in workItemTypesToDelete)
-                {
-                    await DeleteWorkItemsByType(client, organization, project, workItemType);
-                }
-            }
-        }
-
-        static async Task DeleteWorkItemsByType(HttpClient client, string organization, string project, string workItemType)
-        {
-            string queryUrl = $"https://dev.azure.com/{organization}/{project}/_apis/wit/wiql?api-version=7.1";
-
-            var query = new
-            {
-                query = $"SELECT [System.Id], [System.Title], [System.State] FROM WorkItems " +
-                        $"WHERE [System.WorkItemType] = '{workItemType}' " + $"AND [System.State] NOT IN ('Closed', 'Removed')"
-            };
-
-            var content = new StringContent(JsonSerializer.Serialize(query), Encoding.UTF8, "application/json");
-            HttpResponseMessage queryResponse = await client.PostAsync(queryUrl, content);
-
-            if (!queryResponse.IsSuccessStatusCode)
-            {
-                Console.WriteLine($"❌ [ERROR] Failed to retrieve {workItemType} work items. Status: {queryResponse.StatusCode}");
-                return;
-            }
-
-            var queryResult = JsonSerializer.Deserialize<QueryResult>(await queryResponse.Content.ReadAsStringAsync());
-
-            if (queryResult.WorkItems.Count == 0)
-            {
-                Console.WriteLine($"✅ No {workItemType} work items found.");
-                return;
-            }
-
-            Console.WriteLine($"🔍 Found {queryResult.WorkItems.Count} {workItemType} work items. Listing them:");
-
-            foreach (var workItem in queryResult.WorkItems)
-            {
-                Console.WriteLine($"📌 ID: {workItem.Id}");
-            }
-
-            Console.WriteLine("Proceeding with deletion...");
-
-            foreach (var workItem in queryResult.WorkItems)
-            {
-                await DeleteWorkItem(client, organization, project, workItem.Id);
-            }
-        }
-
-        static async Task DeleteWorkItem(HttpClient client, string organization, string project, int workItemId)
-        {
-            string deleteUrl = $"https://dev.azure.com/{organization}/{project}/_apis/wit/workitems/{workItemId}?api-version=7.1";
-
-            HttpResponseMessage deleteResponse = await client.DeleteAsync(deleteUrl);
-
-            if (deleteResponse.IsSuccessStatusCode)
-            {
-                Console.WriteLine($"🗑️ Work item {workItemId} deleted successfully.");
-            }
-            else
-            {
-                Console.WriteLine($"❌ [ERROR] Failed to delete work item {workItemId}. Status: {deleteResponse.StatusCode}");
-            }
+            await DeleteWorkItemsByType(client, organization, project, type);
         }
     }
 
-    public class QueryResult
+    static async Task DeleteWorkItemsByType(HttpClient client, string organization, string project, string workItemType)
     {
-        public List<WorkItemReference> WorkItems { get; set; } = new List<WorkItemReference>();
+        Console.WriteLine($"Searching for {workItemType}s...");
+
+        string queryUrl = $"https://dev.azure.com/{organization}/{project}/_apis/wit/wiql?api-version=7.1-preview.2";
+        string queryJson = $@"
+        {{
+            ""query"": ""SELECT [System.Id] FROM WorkItems WHERE [System.WorkItemType] = '{workItemType}'""
+        }}";
+
+        var content = new StringContent(queryJson, Encoding.UTF8, "application/json");
+        HttpResponseMessage response = await client.PostAsync(queryUrl, content);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            Console.WriteLine($"Failed to fetch {workItemType}s: {response.ReasonPhrase}");
+            return;
+        }
+
+        string responseString = await response.Content.ReadAsStringAsync();
+        using JsonDocument doc = JsonDocument.Parse(responseString);
+        JsonElement root = doc.RootElement;
+
+        if (!root.TryGetProperty("workItems", out JsonElement workItems) || workItems.GetArrayLength() == 0)
+        {
+            Console.WriteLine($"No {workItemType}s found.");
+            return;
+        }
+
+        List<int> workItemIds = new List<int>();
+        foreach (JsonElement item in workItems.EnumerateArray())
+        {
+            workItemIds.Add(item.GetProperty("id").GetInt32());
+        }
+
+        Console.WriteLine($"Found {workItemIds.Count} {workItemType}s. Deleting...");
+
+        foreach (int id in workItemIds)
+        {
+            await DeleteWorkItem(client, organization, project, id);
+        }
     }
 
-    public class WorkItemReference
+    static async Task DeleteWorkItem(HttpClient client, string organization, string project, int workItemId)
     {
-        public int Id { get; set; }
+        string url = $"https://dev.azure.com/{organization}/{project}/_apis/wit/workitems/{workItemId}?api-version=7.1-preview.2";
+        HttpResponseMessage response = await client.DeleteAsync(url);
+
+        if (response.IsSuccessStatusCode)
+        {
+            Console.WriteLine($"Deleted Work Item {workItemId}");
+        }
+        else
+        {
+            Console.WriteLine($"Failed to delete Work Item {workItemId}: {response.ReasonPhrase}");
+        }
     }
 
+    #region Configuration
+    static IConfiguration LoadConfiguration()
+    {
+        string projectRoot = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\.."));
+
+        return new ConfigurationBuilder()
+        .SetBasePath(projectRoot)
+        .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+        .Build();
+    }
+
+    #endregion
 }
