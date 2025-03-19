@@ -21,10 +21,10 @@ MAPPING from PivotalTracker to Azure DevOps
     Chore             ->    User Story
     Release           ->    Release
 
-                        Low - 4
-                        Medium - 3
-                        High - 2
-                        Critical - 2
+                            Low - 4
+                            Medium - 3
+                            High - 2
+                            Critical - 2
 
     Started           =>    Active
     Unstarted         =>    New
