@@ -1,13 +1,15 @@
 Replace the below key's values in the appsettings.json file
-    1. Organization 
-    2. Project
-    3. PersonalAccessToken
-    4. CsvFilePath     --File Name and Location to insert Tickets
-    5. AttachmentPath  --Folder Name and Location to attach files based on TicketID
+        
+        Organization 
+        Project
+        PersonalAccessToken
+        CsvFilePath     --File Name and Location to insert Tickets
+        AttachmentPath  --Folder Name and Location to attach files based on TicketID
 
 Important:
-    1. The actual CSV file's columns "Comment" to be changed to "Comment1" to "CommentN".
-    2. In all the column name - there should not be any space in a single column name.
+    
+        The actual CSV file's columns "Comment" to be changed to "Comment1" to "CommentN".
+        In all the column name - there should not be any space in a single column name.
 
 
 -------------------------------------------
