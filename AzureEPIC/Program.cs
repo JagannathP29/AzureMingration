@@ -75,6 +75,7 @@ class Program
                     Convert.ToBase64String(Encoding.ASCII.GetBytes($":{pat}")));
 
                 // Step 1: Create Epics(Actually Feature in Azure DevOps)
+                records = records.OrderBy(f => f.CreatedAt).ToList();
                 foreach (var record in records)
                 {
                     if (record.Type.Equals("Epic", StringComparison.OrdinalIgnoreCase))
@@ -114,6 +115,7 @@ class Program
                 }
 
                 // Step 2: Create Features(User Story) and link them to Epics(Features)
+                features = features.OrderBy(f => f.CreatedAt).ToList();
                 foreach (var feature in features)
                 {
                     string featureLabel = Normalize(feature.Labels);
@@ -136,8 +138,6 @@ class Program
                                 if (!string.IsNullOrEmpty(feature.Id))
                                 {
                                     Console.WriteLine($"✅ Work Item '{feature.Title}' created.");
-                                    //await ProcessCommemnts(client, organization, project, featureId, feature.Comments);
-                                    //Attach Files from"
                                     await ProcessAttachments(client, organization, project, featureId, feature.Id, attachmentPath);
                                 }
                             }
@@ -150,6 +150,7 @@ class Program
                 }
 
                 // Step 3: Create Releases (User Story)
+                releases = releases.OrderBy(f => f.CreatedAt).ToList();
                 foreach (var release in releases)
                 {
                     string releaseLabel = Normalize(release.Labels);
@@ -172,7 +173,6 @@ class Program
                                 if (!string.IsNullOrEmpty(releaseId))
                                 {
                                     Console.WriteLine($"✅ Bug(User Story) '{release.Title}' created.");
-                                    //await ProcessCommemnts(client, organization, project, releaseId, release.Comments);
                                     await ProcessAttachments(client, organization, project, releaseId, release.Id, attachmentPath);
                                 }
                             }
@@ -197,6 +197,7 @@ class Program
                     }
                 }
 
+                chores = chores.OrderBy(f => f.CreatedAt).ToList();
                 foreach (var chore in chores)
                 {
                     if (choreFeatureId != null)
@@ -205,7 +206,6 @@ class Program
                         if (!string.IsNullOrEmpty(choreId))
                         {
                             Console.WriteLine($"✅ Chore (User Story) '{chore.Title}' created under Parent Chore Feature.");
-                            //await ProcessCommemnts(client, organization, project, choreId, chore.Comments);
                             await ProcessAttachments(client, organization, project, choreId, chore.Id, attachmentPath);
                         }
                     }
