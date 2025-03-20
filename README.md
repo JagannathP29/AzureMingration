@@ -7,7 +7,8 @@ Replace the below key's values in the appsettings.json file
         AttachmentPath  --Folder Name and Location to attach files based on TicketID
 
 Important:
-    
+        
+        Make the columns Owned By to OwnedBy1, OwnedBy2.
         The actual CSV file's columns "Comment" to be changed to "Comment1" to "CommentN".
         In all the column name - there should not be any space in a single column name.
 
