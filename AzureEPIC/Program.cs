@@ -74,7 +74,7 @@ class Program
             {
                 client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json-patch+json"));
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.ASCII.GetBytes($":{pat}")));
-                
+
                 List<string> azureIds = await GetAzurePTStoryValues(client, organization, project);
 
                 // Step 1: Create Epics(Actually Feature in Azure DevOps)
@@ -230,6 +230,7 @@ class Program
     static async Task<string> CreateWorkItem(HttpClient client, string organization, string project, string type, string? id, string title, string description, string priority = null, string currentState = null, List<string> comments = null, DateTime? acceptedAt = null, DateTime? deadline = null, DateTime? createdAt = null, double? estimate = null, string ownedBy1 = null, string ownedBy2 = null, string parentId = null)
     {
         string url = $"https://dev.azure.com/{organization}/{project}/_apis/wit/workitems/${type}?api-version=7.1";
+        List<string> azureUsers = await GetAzureDevOpsUsers(client, organization, project);
 
         var workItem = new List<object>
         {
@@ -285,10 +286,22 @@ class Program
             workItem.Add(new { op = "add", path = "/fields/Microsoft.VSTS.Scheduling.TargetDate", value = deadline.Value.ToString("yyyy-MM-ddTHH:mm:ss.fffZ") });
         }
 
-        //if (!string.IsNullOrEmpty(ownedBy1) || !string.IsNullOrEmpty(ownedBy2))
-        //{
-        //    workItem.Add(new { op = "add", path = "/fields/System.AssignedTo", value = string.IsNullOrEmpty(ownedBy1) ? ownedBy2 : ownedBy1 });
-        //}
+        string assignedTo = null;
+        if (!string.IsNullOrEmpty(ownedBy1))
+        {
+            string firstName1 = ownedBy1.Split(' ')[0];
+            assignedTo = azureUsers.FirstOrDefault(user => user.StartsWith(firstName1, StringComparison.OrdinalIgnoreCase));
+        }
+        if (assignedTo == null && !string.IsNullOrEmpty(ownedBy2))
+        {
+            string firstName2 = ownedBy2.Split(' ')[0];
+            assignedTo = azureUsers.FirstOrDefault(user => user.StartsWith(firstName2, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrEmpty(assignedTo))
+        {
+            workItem.Add(new { op = "add", path = "/fields/System.AssignedTo", value = assignedTo });
+        }
 
         var content = new StringContent(JsonSerializer.Serialize(workItem), Encoding.UTF8, "application/json-patch+json");
         HttpResponseMessage response = await client.PostAsync(url, content);
@@ -441,6 +454,27 @@ class Program
         return null;
     }
 
+    static async Task<List<string>> GetAzureDevOpsUsers(HttpClient client, string organization, string project)
+    {
+        string url = $"https://vssps.dev.azure.com/{organization}/_apis/graph/users?api-version=7.1-preview.1";
+        HttpResponseMessage response = await client.GetAsync(url);
+
+        if (response.IsSuccessStatusCode)
+        {
+            string responseBody = await response.Content.ReadAsStringAsync();
+            JsonDocument json = JsonDocument.Parse(responseBody);
+
+            List<string> users = json.RootElement.GetProperty("value").EnumerateArray().Select(u => u.GetProperty("displayName").GetString()).ToList();
+
+            return users;
+        }
+        else
+        {
+            Console.WriteLine($"❌ [ERROR] Failed to fetch users. Status: {response.StatusCode}");
+            return new List<string>();
+        }
+    }
+
     #endregion
 
 
@@ -455,7 +489,7 @@ class Program
             Console.WriteLine("⚠️ No comments provided.");
             return;
         }
-        
+
         foreach (var comment in comments)
         {
             string formattedComment = "<b>Migrated from Pivotal Tracker</b><br><br>" + comment;
