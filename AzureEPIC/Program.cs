@@ -443,6 +443,12 @@ class Program
     {
         string url = $"https://dev.azure.com/{organization}/{project}/_apis/wit/workitems/{workItemId}?api-version=7.1";
 
+        if (comments == null || comments.Count == 0)
+        {
+            Console.WriteLine("⚠️ No comments provided.");
+            return;
+        }
+
         foreach (var comment in comments)
         {
             var patchData = new List<object>
