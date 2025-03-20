@@ -1,4 +1,4 @@
-Id,Title,Labels,Iteration,Iteration Start,Iteration End,Type,Estimate,Priority,CurrentState,CreatedAt,AcceptedAt,Deadline,Requested By,Description,URL,Owned By,Owned By,Comment1,Comment2,Comment3,Comment4,Comment5,Comment6,Comment7,Comment8,Comment9,Comment10,Comment11,Comment12,Comment13,Comment14,Comment15,Comment16,Comment17,Comment18,Comment19,Comment20,Comment21,Comment22,Comment23,Comment24,Comment25,Comment26,Comment27,Comment28,Comment29,Comment30,Comment31,Comment32,Comment33,Comment34,Comment35,Comment36,Comment37,Comment38,Task,Task Status,Task,Task Status,Task,Task Status,Task,Task Status,Task,Task Status,Task,Task Status,Task,Task Status
+Id,Title,Labels,Iteration,Iteration Start,Iteration End,Type,Estimate,Priority,CurrentState,CreatedAt,AcceptedAt,Deadline,Requested By,Description,URL,OwnedBy1,OwnedBy2,Comment1,Comment2,Comment3,Comment4,Comment5,Comment6,Comment7,Comment8,Comment9,Comment10,Comment11,Comment12,Comment13,Comment14,Comment15,Comment16,Comment17,Comment18,Comment19,Comment20,Comment21,Comment22,Comment23,Comment24,Comment25,Comment26,Comment27,Comment28,Comment29,Comment30,Comment31,Comment32,Comment33,Comment34,Comment35,Comment36,Comment37,Comment38,Task,Task Status,Task,Task Status,Task,Task Status,Task,Task Status,Task,Task Status,Task,Task Status,Task,Task Status
 5319817,Conf logoz backend ,conf logoz backend,,,,epic,,,,25-Nov-24,,,,,https://www.pivotaltracker.com/epic/show/5319817,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 188610886,Story 1: Larvol users should be able to add images / logos for conference iteration ,conf logoz backend,708,17-Dec-24,23-Dec-24,feature,2,p3 - Low,accepted,25-Nov-24,23-Dec-24,,Sreedhar Reddy,"1.	Mockup - https://xd.adobe.com/view/be43989d-c8ba-4253-b8a8-04772af6fd8f-eb10/grid/
 2.	Refer -  https://adminpulse.larvol.com/Entities/ConferenceIterationManager/Detail.aspx?ConferenceIterationId=
@@ -7,7 +7,7 @@ Id,Title,Labels,Iteration,Iteration Start,Iteration End,Type,Estimate,Priority,C
 5.	User will have ability to click the thumbnail image to add the logo image.
 6.	Accepted formats - .SVG, .JPG, .JPEG, .PNG and .GIF. Show message if file formats not supported - Invalid file format. Please upload a file in .SVG, .JPG, .JPEG, .PNG or .GIF format.
 7.	Restrict file size to 1MB- Show message if file size exceeds 1MB - The file size exceeds the 1MB limit. Please upload a smaller file.
-",https://www.pivotaltracker.com/story/show/188610886,Abhay Kumar,," (Sreedhar Reddy - Nov 25, 2024)",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+",https://www.pivotaltracker.com/story/show/188610886,Abhay Rout,Jagannath Patra," (Sreedhar Reddy - Nov 25, 2024)",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 188610893,Story 2: Larvol users can browse and select the image to upload by clicking the thumbnail icon,conf logoz backend,708,17-Dec-24,23-Dec-24,feature,2,p3 - Low,accepted,25-Nov-24,23-Dec-24,,Sreedhar Reddy,"1.	When the user clicks on the camera icon or thumbnail, a browsing pop-up will appear.
 2.	The user can select an image from their local drive and upload it as a logo.
 3.	User will browse and select an image.
@@ -18,18 +18,18 @@ Id,Title,Labels,Iteration,Iteration Start,Iteration End,Type,Estimate,Priority,C
 8.	On clicking delete icon, pop-up message will open with Yes & No buttons, to confirm deletion - “Are you sure you want to delete this logo?”
 9.	Clicking on “Yes” button will delete the logo, and clicking on “No” button will close the popup. 
 10.	After uploading and saving logo, it will be displayed in Conference Iteration Manager page grid in new column with heading as “Conference Logo”. This column is not required to have in the excel export. 
-",https://www.pivotaltracker.com/story/show/188610893,Abhay Kumar,," (Sreedhar Reddy - Nov 25, 2024)",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+",https://www.pivotaltracker.com/story/show/188610893,Abhay Rout,," (Sreedhar Reddy - Nov 25, 2024)",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 188610897,Story 3: Update the Conference iteration API to include the field for the logo,conf logoz backend,708,17-Dec-24,23-Dec-24,feature,1,p3 - Low,accepted,25-Nov-24,23-Dec-24,,Sreedhar Reddy,"1.	Add field – “logo” in API - http://api.larvolinsight.com/api.ashx?tablename=conferenceiterations&id=f3133ca9-5e11-4088-983e-1fb632b0d2a4
 2.	Logos will be stored in Delta and link will be sent.
 3.	This field to be added at end after “expected_attendees” field.
-",https://www.pivotaltracker.com/story/show/188610897,Abhay Kumar,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+",https://www.pivotaltracker.com/story/show/188610897,Abhay Rout,Jagannath Patra,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 5316884,Company logoz Rev2,company logoz rev2,,,,epic,,,,14-Nov-24,,,,,https://www.pivotaltracker.com/epic/show/5316884,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 188567483,Story 1: Ability to upload SVG images ,company logoz rev2,706,03-Dec-24,09-Dec-24,feature,2,p3 - Low,accepted,14-Nov-24,10-Dec-24,,Sreedhar Reddy,"1.	Refer to #188325815 
 2.	Regarding point 5 in story, add option to allow upload of SVG images 
 3.	Accepted formats - .SVG, .JPG, .JPEG, .GIF, and .PNG. Show message if file formats not supported - Invalid file format. Please upload a file in .SVG, .JPG, .JPEG, .GIF, or .PNG format.
 4.	Restrict file size to 1MB- Show message if file size exceeds 1MB - The file size exceeds the 1 MB limit. Please upload a smaller file.
-Refer screenshot",https://www.pivotaltracker.com/story/show/188567483,Abhay Kumar,," (Sreedhar Reddy - Nov 14, 2024)","https://teams.microsoft.com/l/message/19:ccc83cab10154eb68be5137267568569@thread.v2/1732092896374?context=%7B%22contextType%22%3A%22chat%22%7D (Abhay Kumar - Nov 21, 2024)",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
-188633848,"In institution entity once uploaded logo, if changed, old logo link should be still accessible.",company logoz rev2,706,03-Dec-24,09-Dec-24,feature,1,p3 - Low,accepted,01-Dec-24,10-Dec-24,,nandinibv,,https://www.pivotaltracker.com/story/show/188633848,Abhay Kumar,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+Refer screenshot",https://www.pivotaltracker.com/story/show/188567483,,Jagannath Patra," (Sreedhar Reddy - Nov 14, 2024)","https://teams.microsoft.com/l/message/19:ccc83cab10154eb68be5137267568569@thread.v2/1732092896374?context=%7B%22contextType%22%3A%22chat%22%7D (Abhay Kumar - Nov 21, 2024)",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+188633848,"In institution entity once uploaded logo, if changed, old logo link should be still accessible.",company logoz rev2,706,03-Dec-24,09-Dec-24,feature,1,p3 - Low,accepted,01-Dec-24,10-Dec-24,,nandinibv,,https://www.pivotaltracker.com/story/show/188633848,,Jagannath Patra,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 5308372,Display NameZ,display namez,,,,epic,,,,19-Oct-24,,,,,https://www.pivotaltracker.com/epic/show/5308372,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 188451585,Story 1: Addition of “Display Name” field in HET Manager,display namez,702,05-Nov-24,11-Nov-24,feature,1,p3 - Low,accepted,19-Oct-24,07-Nov-24,,Sreedhar Reddy,"1.	Refer: http://admin.larvolinsight.com/Entities/HetKOLManager/Detail.aspx
 2.	Add field - Display Name
@@ -37,7 +37,7 @@ Refer screenshot",https://www.pivotaltracker.com/story/show/188567483,Abhay Kuma
 4.	Field should appear when DOL “Role” is ticked.
 5.	This field should be mandatory, show asterisk sign (*) in red color before the ""Display Name"" field same as ""First Name"" and ""Last Name"" field.
 6.	Free text field and char length should be 150 characters
-",https://www.pivotaltracker.com/story/show/188451585,Abhay Kumar,," (Sreedhar Reddy - Oct 19, 2024)","	@sreedharr  
+",https://www.pivotaltracker.com/story/show/188451585,Abhay Rout,," (Sreedhar Reddy - Oct 19, 2024)","	@sreedharr  
 Regarding above story : Since the Display name field will be visible when 'DOL' is checked..
 What should be done if a user selects DOL and adds Display Name. 
 And now goes and unchecks 'DOL'. Do we keep the display name value in backend or clear it ?
@@ -51,7 +51,7 @@ So API will show blank for display name in such case.
 2.	Add field – display_name
 3.	To be added after last_name field in API
 4.	Modified date will be updated whenever this field in added by the analyst.
-",https://www.pivotaltracker.com/story/show/188451586,Abhay Kumar,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+",https://www.pivotaltracker.com/story/show/188451586,Abhay Rout,Jagannath Patra,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 5257125,NestingZ,nestingz,,,,epic,,,,10-May-24,,,,,https://www.pivotaltracker.com/epic/show/5257125,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 187583865,Story 1: Addition of new fields to the AET Table,nestingz,681,11-Jun-24,17-Jun-24,feature,1,p3 - Low,accepted,10-May-24,18-Jun-24,,Sreedhar Reddy,"1.	Refer Alterations entity table http://admin.larvolinsight.com/Entities/AlterationManager/Default.aspx
 2.	New fields to be added to the AET entry form
@@ -61,7 +61,7 @@ a.	Somatic / Germline
 b.	Validation Status 
 c.	Veri Active
 d.	Clin Active
-",https://www.pivotaltracker.com/story/show/187583865,Amit Chauhan,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+",https://www.pivotaltracker.com/story/show/187583865,,Jagannath Patra,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 187583866,Story 2: Order and behaviour of the new fields to be added in the AET,nestingz,681,11-Jun-24,17-Jun-24,feature,2,p3 - Low,accepted,10-May-24,18-Jun-24,,Sreedhar Reddy,"1.	Somatic / Germline – 
 a.	To be added after Description field
 b.	Dropdown showing the values
@@ -85,7 +85,7 @@ b.	Radio button
 c.	Default status to be true for existing records and when new record is created
 4.	Changes to current is active field
 a.	Rename field to – Is Clin Active 
-",https://www.pivotaltracker.com/story/show/187583866,Amit Chauhan,," (Sreedhar Reddy - May 10, 2024)",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+",https://www.pivotaltracker.com/story/show/187583866,,Jagannath Patra," (Sreedhar Reddy - May 10, 2024)",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 187583867,Story 3: Addition of new record under Alteration Type,nestingz,681,11-Jun-24,17-Jun-24,feature,1,p3 - Low,accepted,10-May-24,18-Jun-24,,Sreedhar Reddy,"1.	List of values to be shown in the Alteration Type dropdown 
 a.	None – Default value shown
 b.	Antigen Positive
@@ -105,7 +105,7 @@ o.	Rearrangement
 p.	Signature
 q.	Translocation
 r.	Wild-Type
-",https://www.pivotaltracker.com/story/show/187583867,Amit Chauhan,,"Alteration type dropdown already have a value CNA, in the above list there is a value CAN. Should we need to keep both or this is misspelled as CAN here? @nandinibv  @sreedharr  (Amit Chauhan - May 17, 2024)","It should be only CNA. CAN is a typo and should not be considered  (Sreedhar Reddy - May 17, 2024)",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+",https://www.pivotaltracker.com/story/show/187583867,,Jagannath Patra,"Alteration type dropdown already have a value CNA, in the above list there is a value CAN. Should we need to keep both or this is misspelled as CAN here? @nandinibv  @sreedharr  (Amit Chauhan - May 17, 2024)","It should be only CNA. CAN is a typo and should not be considered  (Sreedhar Reddy - May 17, 2024)",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 187583868,Story 4: Addition of new columns to the AET Grid,nestingz,681,11-Jun-24,17-Jun-24,feature,1,p3 - Low,accepted,10-May-24,18-Jun-24,,Sreedhar Reddy,"1.	Add columns after Description
 a.	Somatic / Germline
 b.	Validation Status 
@@ -128,14 +128,14 @@ a.	Somatic / Germline
 b.	Validation Status 
 c.	Veri Active
 d.	Change Is active to clin_active 
-",https://www.pivotaltracker.com/story/show/187583868,Amit Chauhan,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+",https://www.pivotaltracker.com/story/show/187583868,,Jagannath Patra,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 5278635,ModalityZ Tag,modalityz tag,,,,epic,,,,15-Jul-24,,,,,https://www.pivotaltracker.com/epic/show/5278635,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 187954956,Story 1: In the product entity show the attribute if a product type is tagged as modality in the product type entity table.,modalityz tag,688,30-Jul-24,05-Aug-24,feature,1,p3 - Low,accepted,15-Jul-24,30-Jul-24,,Sreedhar Reddy,"1.	Refer to http://admin.larvolinsight.com/Entities/ProductManager/ProductFlatform.aspx?ProductId=9cd77f86-adb7-4186-85e7-47d3e44f0530
 2.	This product is tagged to two product types. One of the product type is Chemotherapy which is tagged in product type entity table as Modality
 3.	Check http://admin.larvolinsight.com/Entities/ProductTypeManager/Detail.aspx?product_type_id=d5cc73f3-66cd-477c-9381-b108645ab0c0 where Modality is checked
 4.	In such cases in PET show a check for modality next to product type
 5.	This is only display field and non editable. Refer screenshot
-",https://www.pivotaltracker.com/story/show/187954956,Amit Chauhan,," (Sreedhar Reddy - Jul 15, 2024)",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+",https://www.pivotaltracker.com/story/show/187954956,Abhay Rout,," (Sreedhar Reddy - Jul 15, 2024)",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 187954957,Story 2: Analyst should not be able to tag more than one product type that has modality checked,modalityz tag,688,30-Jul-24,05-Aug-24,feature,1,p3 - Low,accepted,15-Jul-24,30-Jul-24,,Sreedhar Reddy,"1.	When product type is tagged to a product, analyst can tag multiple product types (Current scenario)
 2.	Logic to updated to 
 a.	Analyst can tag a product to multiple product types
@@ -143,7 +143,7 @@ b.	However if a product type is having modality checked then they should not be 
 3.	Rule is that for a product team can tag any number of product types but should not be able tag more than one product type that has modality checked
 4.	Show error  in such scenario – There is already one product type tagged with modality. You cannot tag more than one product type with modality.
 5.	In current scenario if a product is already tagged to product types that have more than one modality, system should not allow the user to save the record when its opened for editing unless its corrected. 
-",https://www.pivotaltracker.com/story/show/187954957,Amit Chauhan,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+",https://www.pivotaltracker.com/story/show/187954957,Abhay Rout,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 187954962,Story 3: Update the Product API to include the modality check for product type,modalityz tag,688,30-Jul-24,05-Aug-24,feature,1,p3 - Low,accepted,15-Jul-24,30-Jul-24,,Sreedhar Reddy,"1.	Addition of new field for product type 
 2.	Field to add Modality – True or False 
 3.	Information will be fetched based on the product type from modality field in the product type entity field
@@ -160,9 +160,9 @@ b.	However if a product type is having modality checked then they should not be 
 			</product_type>
 		</product_types>
 		
-",https://www.pivotaltracker.com/story/show/187954962,Amit Chauhan,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+",https://www.pivotaltracker.com/story/show/187954962,Abhay Rout,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 5241551,PET EnhancemetnsZ,pet enhancemetnsz,,,,epic,,,,26-Mar-24,,,,,https://www.pivotaltracker.com/epic/show/5241551,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
-187529228,The product details of pet export is showing wrong data. ,pet enhancemetnsz,676,07-May-24,13-May-24,bug,0,p3 - Low,accepted,01-May-24,13-May-24,,sheelahs,"Area information, highest phase, Discontination status, linked reports, premium linked reports data is showing wrong. ",https://www.pivotaltracker.com/story/show/187529228,Abhay Kumar,,"http://adminstage.larvolinsight.com/Entities/ProductManager/ProductFlatform.aspx?ProductId=9ff79c30-a0cf-45f4-9985-58c9a8a32856
+187529228,The product details of pet export is showing wrong data. ,pet enhancemetnsz,676,07-May-24,13-May-24,bug,0,p3 - Low,accepted,01-May-24,13-May-24,,sheelahs,"Area information, highest phase, Discontination status, linked reports, premium linked reports data is showing wrong. ",https://www.pivotaltracker.com/story/show/187529228,,Jagannath Patra,"http://adminstage.larvolinsight.com/Entities/ProductManager/ProductFlatform.aspx?ProductId=9ff79c30-a0cf-45f4-9985-58c9a8a32856
  (sheelahs - May 1, 2024)",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 187312228,Story 1: Addition of new fields to the product entity page (PET),pet enhancemetnsz,676,07-May-24,13-May-24,feature,1,p3 - Low,accepted,26-Mar-24,13-May-24,,Sreedhar Reddy,"1.	To be added in existing forms and when a new product is created
 2.	List of fields to be added
@@ -172,7 +172,7 @@ c.	Conjugation AA
 d.	SS Conjugation
 e.	Bystander
 3.	To be added below the ADC Antibody field.
-",https://www.pivotaltracker.com/story/show/187312228,Abhay Kumar,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+",https://www.pivotaltracker.com/story/show/187312228,Abhay Rout,Jagannath Patra,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 187312231,Story 2: Rules for the new fields and field behaviour,pet enhancemetnsz,676,07-May-24,13-May-24,feature,2,p3 - Low,accepted,26-Mar-24,13-May-24,,Sreedhar Reddy,"1.	DAR
 a.	Free text field
 b.	Numerical and alphabets are accepted (character length – max 50).
@@ -184,7 +184,7 @@ c.	Optional fields
 3.	By default, no values selected for these fields
 4.	PET ref link http://admin.larvolinsight.com/Entities/ProductManager/ProductFlatform.aspx?ProductId=3b768725-0141-4c22-b1a7-ac26013be360  
 5.	Update the Product entity API to add the fields: DAR, Conjugation Group, Conjugation AA, SS Conjugation and Bystander.
-",https://www.pivotaltracker.com/story/show/187312231,Abhay Kumar,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+",https://www.pivotaltracker.com/story/show/187312231,,Jagannath Patra,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 187312239,Story 3: List of options to be shown in the dropdown for the new fields,pet enhancemetnsz,676,07-May-24,13-May-24,feature,3,p3 - Low,accepted,26-Mar-24,13-May-24,,Sreedhar Reddy,"1.	For Conjugation Group, show following values in dropdown in alphabetical order
 a.	Maleimidocaproyl
 b.	Disulfide
@@ -230,9 +230,9 @@ d.	Controlled
 e.	Strong
 11.	Default show only Choose in the field and this is optional field with ability to select on value from dropdown
 12.	If user wants to remove a selection option then can select Choose from dropdown which implies no value selected
-",https://www.pivotaltracker.com/story/show/187312239,Abhay Kumar,," (Sreedhar Reddy - Mar 26, 2024)",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+",https://www.pivotaltracker.com/story/show/187312239,Abhay Rout,Jagannath Patra," (Sreedhar Reddy - Mar 26, 2024)",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 187312243,"Story 4: PET Excel export should have columns to display DAR, Conjugation Group, Conjugation AA, SS Conjugation, and Bystander information.",pet enhancemetnsz,678,21-May-24,27-May-24,feature,3,p3 - Low,accepted,26-Mar-24,23-May-24,,Sreedhar Reddy,"1.	To add to Excel export and in the grid
 2.	In export, add columns with the headings ""DAR”, “Conjugation Group”, “Conjugation AA”, “SS Conjugation” and “Bystander"" on the right side of the ADC Antibody column in both sheets - ""Product"" and ""Product Details.""
 3.	If no ""DAR”, “Conjugation Group”, “Conjugation AA”, “SS Conjugation” or “Bystander"" is associated with the product, it will have a blank/empty cell for the respective product.
 4.	If ""DAR”, “Conjugation Group”, “Conjugation AA”, “SS Conjugation” or “Bystander"" is associated with the product, it will show the selected option. 
-",https://www.pivotaltracker.com/story/show/187312243,Abhay Kumar,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+",https://www.pivotaltracker.com/story/show/187312243,,Jagannath Patra,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,

@@ -49,6 +49,8 @@ class Program
                     CreatedAt = csv.GetField<DateTime?>("CreatedAt"),
                     AcceptedAt = csv.GetField<DateTime?>("AcceptedAt"),
                     Deadline = csv.GetField<DateTime?>("Deadline"),
+                    OwnedBy1 = csv.GetField("OwnedBy1"),
+                    OwnedBy2 = csv.GetField("OwnedBy2"),
 
                     Comments = new List<string>()
                 };
@@ -89,7 +91,7 @@ class Program
                         }
                         else
                         {
-                            string epicId = await CreateWorkItem(client, organization, project, "Feature", record.Id, record.Title, record.Description, record.Priority, record.CurrentState, record.Comments, record.AcceptedAt, record.Deadline, record.CreatedAt, record.Estimate);
+                            string epicId = await CreateWorkItem(client, organization, project, "Feature", record.Id, record.Title, record.Description, record.Priority, record.CurrentState, record.Comments, record.AcceptedAt, record.Deadline, record.CreatedAt, record.Estimate, record.OwnedBy1, record.OwnedBy2);
                             if (!string.IsNullOrEmpty(epicId))
                             {
                                 epics[normalizedTitle] = epicId;
@@ -135,7 +137,7 @@ class Program
                             }
                             else
                             {
-                                string featureId = await CreateWorkItem(client, organization, project, "User Story", feature.Id, feature.Title, feature.Description, feature.Priority, feature.CurrentState, feature.Comments, feature.AcceptedAt, feature.Deadline, feature.CreatedAt, feature.Estimate, epicId);
+                                string featureId = await CreateWorkItem(client, organization, project, "User Story", feature.Id, feature.Title, feature.Description, feature.Priority, feature.CurrentState, feature.Comments, feature.AcceptedAt, feature.Deadline, feature.CreatedAt, feature.Estimate, feature.OwnedBy1, feature.OwnedBy2, epicId);
                                 if (!string.IsNullOrEmpty(feature.Id))
                                 {
                                     Console.WriteLine($"✅ Work Item '{feature.Title}' created.");
@@ -170,7 +172,7 @@ class Program
                             {
                                 Console.WriteLine($"Checking feature '{release.Title}' with label '{releaseLabel}'...");
 
-                                string releaseId = await CreateWorkItem(client, organization, project, "Release", release.Id, release.Title, release.Description, release.Priority, release.CurrentState, release.Comments, release.AcceptedAt, release.Deadline, release.CreatedAt, release.Estimate, epicId);
+                                string releaseId = await CreateWorkItem(client, organization, project, "Release", release.Id, release.Title, release.Description, release.Priority, release.CurrentState, release.Comments, release.AcceptedAt, release.Deadline, release.CreatedAt, release.Estimate, release.OwnedBy1, release.OwnedBy2, epicId);
                                 if (!string.IsNullOrEmpty(releaseId))
                                 {
                                     Console.WriteLine($"✅ Bug(User Story) '{release.Title}' created.");
@@ -209,7 +211,7 @@ class Program
                         }
                         else
                         {
-                            string choreId = await CreateWorkItem(client, organization, project, "User Story", chore.Id, chore.Title, chore.Description, chore.Priority, chore.CurrentState, chore.Comments, chore.AcceptedAt, chore.Deadline, chore.CreatedAt, chore.Estimate, choreFeatureId);
+                            string choreId = await CreateWorkItem(client, organization, project, "User Story", chore.Id, chore.Title, chore.Description, chore.Priority, chore.CurrentState, chore.Comments, chore.AcceptedAt, chore.Deadline, chore.CreatedAt, chore.Estimate, chore.OwnedBy1, chore.OwnedBy2, choreFeatureId);
                             if (!string.IsNullOrEmpty(choreId))
                             {
                                 Console.WriteLine($"✅ Chore (User Story) '{chore.Title}' created under Parent Chore Feature.");
@@ -225,7 +227,7 @@ class Program
 
     #region Create Workitems
 
-    static async Task<string> CreateWorkItem(HttpClient client, string organization, string project, string type, string? id, string title, string description, string priority = null, string currentState = null, List<string> comments = null, DateTime? acceptedAt = null, DateTime? deadline = null, DateTime? createdAt = null, double? estimate = null, string parentId = null)
+    static async Task<string> CreateWorkItem(HttpClient client, string organization, string project, string type, string? id, string title, string description, string priority = null, string currentState = null, List<string> comments = null, DateTime? acceptedAt = null, DateTime? deadline = null, DateTime? createdAt = null, double? estimate = null, string ownedBy1 = null, string ownedBy2 = null, string parentId = null)
     {
         string url = $"https://dev.azure.com/{organization}/{project}/_apis/wit/workitems/${type}?api-version=7.1";
 
@@ -282,6 +284,11 @@ class Program
         {
             workItem.Add(new { op = "add", path = "/fields/Microsoft.VSTS.Scheduling.TargetDate", value = deadline.Value.ToString("yyyy-MM-ddTHH:mm:ss.fffZ") });
         }
+
+        //if (!string.IsNullOrEmpty(ownedBy1) || !string.IsNullOrEmpty(ownedBy2))
+        //{
+        //    workItem.Add(new { op = "add", path = "/fields/System.AssignedTo", value = string.IsNullOrEmpty(ownedBy1) ? ownedBy2 : ownedBy1 });
+        //}
 
         var content = new StringContent(JsonSerializer.Serialize(workItem), Encoding.UTF8, "application/json-patch+json");
         HttpResponseMessage response = await client.PostAsync(url, content);
@@ -448,12 +455,14 @@ class Program
             Console.WriteLine("⚠️ No comments provided.");
             return;
         }
-
+        
         foreach (var comment in comments)
         {
+            string formattedComment = "<b>Migrated from Pivotal Tracker</b><br><br>" + comment;
+
             var patchData = new List<object>
             {
-                new { op = "add", path = "/fields/System.History", value = comment }
+                new { op = "add", path = "/fields/System.History", value = formattedComment }
             };
 
             var json = JsonSerializer.Serialize(patchData);
@@ -464,7 +473,7 @@ class Program
 
             if (response.IsSuccessStatusCode)
             {
-                Console.WriteLine($"✅ Comment added to Work Item {workItemId}: {comment}");
+                Console.WriteLine($"✅ Comment added to Work Item {workItemId}: {formattedComment}");
             }
             else
             {
@@ -756,5 +765,7 @@ class WorkItem
     public DateTime? CreatedAt { get; set; }
     public DateTime? AcceptedAt { get; set; }
     public DateTime? Deadline { get; set; }
+    public string? OwnedBy1 { get; set; }
+    public string? OwnedBy2 { get; set; }
     public List<string> Comments { get; set; } = new List<string>();
 }
