@@ -7,10 +7,18 @@ using Microsoft.Extensions.Configuration;
 
 class Program
 {
-    private static int processedCount = 0;
+    private static List<string> createdWorkItems = new List<string>();
+    private static HashSet<string> processedIds = new HashSet<string>();
 
     static async Task Main(string[] args)
     {
+        if (args.Length < 1)
+        {
+            return;
+        }
+
+        string param = args[0].ToLower();
+
         var config = LoadConfiguration();
         string organization = config["AzureDevOps:Organization"];
         string project = config["AzureDevOps:Project"];
@@ -22,108 +30,126 @@ class Program
         using var client = CreateHttpClient(pat);
         string choreParentFeatureId = null;
 
-        List<string> azurePTIds = await GetAzurePTStoryValues(client, organization, project);
-        records = records.OrderBy(f => f.CreatedAt).ToList();
+        List<(string Id, string PTStory)> azurePTData = await GetAzurePTStoryValues(client, organization, project);
+        processedIds = azurePTData.Select(x => x.PTStory).ToHashSet();
 
-        //var epics = records.Where(r => r.Type.Equals("epic", StringComparison.OrdinalIgnoreCase)).ToList();
-        //var workItems = records.Where(r => r.Type is "feature" or "bug" or "chore" or "release").ToList();
-        //var chores = workItems.Where(w => w.Type.Equals("chore", StringComparison.OrdinalIgnoreCase)).ToList();
-
-        List<WorkItem> epics = new List<WorkItem>();
-        List<WorkItem> workItems = new List<WorkItem>(); //Feature, Bug, Release
-        List<WorkItem> chores = new List<WorkItem>();
-
-        foreach (var record in records)
+        switch (param)
         {
-            switch (record.Type.ToLower())
-            {
-                case "epic":
-                    epics.Add(record);
-                    break;
-                case "feature":
-                case "bug":
-                case "chore":
-                case "release":
-                    workItems.Add(record);
-                    if (record.Type.Equals("chore", StringComparison.OrdinalIgnoreCase))
-                    {
-                        chores.Add(record);
-                    }
-                    break;
-            }
+            case "epic":
+                await ProcessEpics(client, organization, project, records, azurePTData, attachmentPath);
+                break;
+            case "feature":
+            case "bug":
+            case "release":
+                await ProcessFeaturesAndBugsAndRelease(client, organization, project, records, azurePTData, attachmentPath);
+                break;
+            case "chore":
+                await ProcessChores(client, organization, project, records, azurePTData, attachmentPath);
+                break;
+            default:
+                Console.WriteLine("Invalid type specified. Use 'epic', 'feature', or 'bug'.");
+                break;
         }
-
-        foreach (var epic in epics)
-        {
-            if (azurePTIds.Contains(epic.Id)) continue;
-
-            string epicId = await CreateWorkItem(client, organization, project, "Feature", epic, null, attachmentPath);
-            if (!string.IsNullOrEmpty(epicId)) 
-            {
-                Console.WriteLine($"Feature - '{epic.Title}' created with ID - {epicId}");
-                processedCount++;
-            }
-
-            var childItems = workItems.Where(w => Normalize(w.Labels) == Normalize(epic.Title) && !w.Type.Equals("Chore", StringComparison.OrdinalIgnoreCase)).OrderBy(f => f.CreatedAt).ToList();
-
-            foreach (var child in childItems)
-            {
-                if (azurePTIds.Contains(child.Id)) continue;
-
-                string childId = await CreateWorkItem(client, organization, project, MapWorkItemType(child.Type), child, epicId, attachmentPath);
-
-                if (!string.IsNullOrEmpty(childId))
-                {
-                    Console.WriteLine($"{MapWorkItemType(child.Type)} created under Epic '{epic.Title}'");
-                    processedCount++;
-                }
-            }
-        }
-
-        if (chores.Any())
-        {
-            choreParentFeatureId = await CreateChoreParentFeature(client, organization, project);
-
-            foreach (var chore in chores)
-            {
-                if (azurePTIds.Contains(chore.Id)) continue;
-
-                string choreId = await CreateWorkItem(client, organization, project, "User Story", chore, choreParentFeatureId, attachmentPath);
-                if (!string.IsNullOrEmpty(choreId))
-                {
-                    Console.WriteLine($"Chore '{chore.Title}' linked to Chore Parent Feature");
-                    processedCount++;
-                }
-            }
-        }
-
-        Console.WriteLine($"{processedCount} items processed successfully of {records.Count} rows.");
     }
 
     #region Create Workitems
-    
-    private static async Task<string> CreateChoreParentFeature(HttpClient client, string organization, string project)
+
+    private static async Task ProcessEpics(HttpClient client, string organization, string project, List<WorkItem> records, List<(string Id, string PTStory)> azurePTData, string attachmentPath)
     {
-        string url = $"https://dev.azure.com/{organization}/{project}/_apis/wit/workitems/$Feature?api-version=7.1";
-        var requestBody = new List<object>
-        {
-            new { op = "add", path = "/fields/System.Title", value = "Chore Parent Feature" },
-            new { op = "add", path = "/fields/System.Description", value = "This feature contains all Chore items" }
-        };
+        List<WorkItem> epics = records.Where(r => r.Type.Equals("epic", StringComparison.OrdinalIgnoreCase)).ToList();        
 
-        var content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json-patch+json");
-        var response = await client.PostAsync(url, content);
-
-        if (!response.IsSuccessStatusCode)
+        foreach (var epic in epics)
         {
-            LogError($"❌ [ERROR] Failed to create Chore Parent Feature.");
-            return null;
+            if (processedIds.Contains(epic.Id))
+                continue;
+
+            string epicId = await CreateWorkItem(client, organization, project, "Feature", epic, null, attachmentPath);
+            if (!string.IsNullOrEmpty(epicId))
+            {
+                Console.WriteLine($"Feature '{epic.Title}' created with ID: {epicId}");
+                createdWorkItems.Add(epicId);
+            }
         }
 
-        var responseBody = await response.Content.ReadAsStringAsync();
-        var json = JsonDocument.Parse(responseBody);
-        int responseId = json.RootElement.GetProperty("id").GetInt32();
-        return responseId.ToString();
+        Console.WriteLine($"{createdWorkItems.Count} Features created.");
+    }
+
+    private static async Task ProcessFeaturesAndBugsAndRelease(HttpClient client, string organization, string project, List<WorkItem> records, List<(string Id, string PTStory)> azurePTData, string attachmentPath)
+    {
+        var workItems = records.Where(r => r.Type.Equals("feature", StringComparison.OrdinalIgnoreCase) || r.Type.Equals("bug", StringComparison.OrdinalIgnoreCase) || r.Type.Equals("release", StringComparison.OrdinalIgnoreCase)).ToList();
+
+        foreach (var workItem in workItems)
+        {
+            if (processedIds.Contains(workItem.Id) || azurePTData.Any(e => e.Id == workItem.Id))
+                continue;
+
+            string parentEpicId = FindParentEpicId(workItem, records, azurePTData);
+            string workItemId = await CreateWorkItem(client, organization, project, MapWorkItemType(workItem.Type), workItem, parentEpicId, attachmentPath);
+
+            if (!string.IsNullOrEmpty(workItemId))
+            {
+                Console.WriteLine($"{workItem.Type} created under EpicID - {parentEpicId}");
+                createdWorkItems.Add(workItemId);
+            }
+        }
+
+        Console.WriteLine($"{createdWorkItems.Count} User stories created.");
+    }
+
+    private static async Task ProcessChores(HttpClient client, string organization, string project, List<WorkItem> records, List<(string Id, string PTStory)> azurePTData, string attachmentPath)
+    {
+        string choreFeatureTitle = "Chore Parent Feature";
+        string choreFeatureId = null;
+
+        var existingFeature = azurePTData.FirstOrDefault(x => x.PTStory.Equals(choreFeatureTitle, StringComparison.OrdinalIgnoreCase));
+        choreFeatureId = await GetExistingFeatureId(client, organization, project, choreFeatureTitle);
+
+        if (!string.IsNullOrEmpty(existingFeature.Id))
+        {
+            choreFeatureId = existingFeature.Id;
+        }
+        else
+        {
+            if (string.IsNullOrEmpty(choreFeatureId))
+            {
+                choreFeatureId = await CreateChoreParentFeature(client, organization, project);
+                if (!string.IsNullOrEmpty(choreFeatureId))
+                {
+                    Console.WriteLine($"Created Chore Parent Feature with ID: {choreFeatureId}");
+                }
+                else
+                {
+                    string errorMessage = $"Failed to create Chore Parent Feature. Exiting chore processing.";
+                    LogError(errorMessage);
+                    return;
+                }
+            }            
+        }
+
+        foreach (var record in records.Where(r => r.Type.Equals("chore", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (processedIds.Contains(record.Id))
+                continue;
+
+            string parentEpicId = FindParentEpicId(record, records, azurePTData);
+            string parentId = !string.IsNullOrEmpty(parentEpicId) ? parentEpicId : choreFeatureId;
+
+            string userStoryId = await CreateWorkItem(client, organization, project, MapWorkItemType(record.Type), record, parentId, attachmentPath);
+
+            if (!string.IsNullOrEmpty(userStoryId))
+            {
+                Console.WriteLine($"Created User Story for Chore under EpicID: {choreFeatureId}");
+                processedIds.Add(record.Id);
+                createdWorkItems.Add(userStoryId);
+            }
+            else
+            {
+                string errorMessage = $"Failed to create User Story for Chore: {record.Title}";
+                LogError(errorMessage);
+            }
+        }
+
+        Console.WriteLine($"{createdWorkItems.Count} User stories created of Chore.");
     }
 
     private static async Task<string> CreateWorkItem(HttpClient client, string organization, string project, string type, WorkItem workItem, string parentId = null, string attachmentPath = null)
@@ -228,7 +254,7 @@ class Program
             }
 
             await ProcessCommemnts(client, organization, project, responseId.ToString(), workItem.Comments);
-            await ProcessAttachments(client, organization, project,responseId.ToString(), workItem.Id, attachmentPath);
+            await ProcessAttachments(client, organization, project, responseId.ToString(), workItem.Id, attachmentPath);
 
             return responseId.ToString();
         }
@@ -462,9 +488,42 @@ class Program
 
     #region Azure[GET]
 
-    static async Task<List<string>> GetAzurePTStoryValues(HttpClient client, string organization, string project)
+    private static async Task<string> GetExistingFeatureId(HttpClient client, string organization, string project, string featureTitle)
     {
-        List<string> ptStoryValues = new List<string>();
+        string queryUrl = $"https://dev.azure.com/{organization}/{project}/_apis/wit/wiql?api-version=7.1-preview.2";
+
+        var query = new
+        {
+            query = $"SELECT [System.Id] FROM WorkItems WHERE [System.Title] = '{featureTitle}' AND [System.WorkItemType] = 'Feature'"
+        };
+
+        var content = new StringContent(JsonSerializer.Serialize(query), Encoding.UTF8, "application/json");
+
+        HttpResponseMessage response = await client.PostAsync(queryUrl, content);
+        string responseBody = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            Console.WriteLine($"[ERROR] WIQL Query Failed. Status Code: {response.StatusCode}");
+            Console.WriteLine($"Response: {responseBody}");
+            return null;
+        }
+
+        JsonDocument json = JsonDocument.Parse(responseBody);
+        if (json.RootElement.TryGetProperty("workItems", out JsonElement workItems) && workItems.GetArrayLength() > 0)
+        {
+            if (workItems[0].TryGetProperty("id", out JsonElement featureId))
+            {
+                return featureId.ToString();
+            }
+        }
+
+        return null;
+    }
+
+    static async Task<List<(string Id, string PTStory)>> GetAzurePTStoryValues(HttpClient client, string organization, string project)
+    {
+        List<(string Id, string PTStory)> ptStoryData = new List<(string, string)>();
         string url = $"https://dev.azure.com/{organization}/{project}/_apis/wit/wiql?api-version=7.1";
 
         var query = new
@@ -489,7 +548,7 @@ class Program
 
                     if (!string.IsNullOrEmpty(ptStoryValue))
                     {
-                        ptStoryValues.Add(ptStoryValue);
+                        ptStoryData.Add((workItemId, ptStoryValue)); // Add work item ID and PTStory
                     }
                 }
             }
@@ -499,7 +558,7 @@ class Program
             Console.WriteLine($"[ERROR] Failed to fetch PT Story work items. Status Code: {response.StatusCode}");
         }
 
-        return ptStoryValues;
+        return ptStoryData;
     }
 
     static async Task<List<string>> GetAzureDevOpsUsers(HttpClient client, string organization, string project)
@@ -546,6 +605,45 @@ class Program
         }
 
         return null;
+    }
+
+    private static string FindParentEpicId(WorkItem workItem, List<WorkItem> records, List<(string Id, string PTStory)> azurePTData)
+    {
+        var parentEpic = records.FirstOrDefault(e =>
+            e.Type.Equals("epic", StringComparison.OrdinalIgnoreCase) &&
+            Normalize(e.Title) == Normalize(workItem.Labels));
+
+        if (parentEpic != null)
+        {
+            var matchingAzurePT = azurePTData.FirstOrDefault(e => e.PTStory == parentEpic.Id);
+            return matchingAzurePT.Id ?? string.Empty;
+        }
+
+        return null;
+    }
+
+    private static async Task<string> CreateChoreParentFeature(HttpClient client, string organization, string project)
+    {
+        string url = $"https://dev.azure.com/{organization}/{project}/_apis/wit/workitems/$Feature?api-version=7.1";
+        var requestBody = new List<object>
+        {
+            new { op = "add", path = "/fields/System.Title", value = "Chore Parent Feature" },
+            new { op = "add", path = "/fields/System.Description", value = "This feature contains all Chore items" }
+        };
+
+        var content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json-patch+json");
+        var response = await client.PostAsync(url, content);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            LogError($"❌ [ERROR] Failed to create Chore Parent Feature.");
+            return null;
+        }
+
+        var responseBody = await response.Content.ReadAsStringAsync();
+        var json = JsonDocument.Parse(responseBody);
+        int responseId = json.RootElement.GetProperty("id").GetInt32();
+        return responseId.ToString();
     }
 
     #endregion
