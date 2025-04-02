@@ -3,14 +3,29 @@ using System.Text;
 using System.Text.Json;
 using System.Globalization;
 using System.Net.Http.Headers;
+using CsvHelper.Configuration;
 using Microsoft.Extensions.Configuration;
+using System.Reflection.Emit;
 
 class Program
 {
     private static int processedCount = 0;
+    private static int totalWorkItemCount = 0;
+    private static HashSet<string> processedIds = new HashSet<string>();
+    private static Dictionary<string, string> epicDict = new();
+    private static List<FailedWorkItem> failedWorkItems = new List<FailedWorkItem>();
 
     static async Task Main(string[] args)
     {
+        if (args.Length < 1)
+        {
+            return;
+        }
+
+        // string param = args[0].ToLower();
+        string param = "updateazure";
+        //string param = "epic";
+
         var config = LoadConfiguration();
         string organization = config["AzureDevOps:Organization"];
         string project = config["AzureDevOps:Project"];
@@ -19,129 +34,298 @@ class Program
         string attachmentPath = config["AttachmentSettings:AttachmentPath"];
 
         var records = ReadCsvFile(csvFilePath);
-        using var client = CreateHttpClient(pat);
-        string choreParentFeatureId = null;
-
-        List<string> azurePTIds = await GetAzurePTStoryValues(client, organization, project);
         records = records.OrderBy(f => f.CreatedAt).ToList();
+        using var client = CreateHttpClient(pat);
 
-        //var epics = records.Where(r => r.Type.Equals("epic", StringComparison.OrdinalIgnoreCase)).ToList();
-        //var workItems = records.Where(r => r.Type is "feature" or "bug" or "chore" or "release").ToList();
-        //var chores = workItems.Where(w => w.Type.Equals("chore", StringComparison.OrdinalIgnoreCase)).ToList();
+        // List<(string Id, string PTStory)> azurePTData = await GetAzurePTStoryValues(client, organization, project);
+        //processedIds = azurePTData.Select(x => x.PTStory).ToHashSet();
+        //await RetryFailedWorkItems(client, organization, project, attachmentPath);
 
-        List<WorkItem> epics = new List<WorkItem>();
-        List<WorkItem> workItems = new List<WorkItem>(); //Feature, Bug, Release
-        List<WorkItem> chores = new List<WorkItem>();
-
-        foreach (var record in records)
+        switch (param)
         {
-            switch (record.Type.ToLower())
-            {
-                case "epic":
-                    epics.Add(record);
-                    break;
-                case "feature":
-                case "bug":
-                case "chore":
-                case "release":
-                    workItems.Add(record);
-                    if (record.Type.Equals("chore", StringComparison.OrdinalIgnoreCase))
-                    {
-                        chores.Add(record);
-                    }
-                    break;
-            }
+            case "epic":
+                await ProcessEpics(client, organization, project, records, attachmentPath);
+                break;
+            case "release":
+                await ProcessReleases(client, organization, project, records, attachmentPath);
+                break;
+            case "updateazure":
+                await UpdateAzureTickets(client, organization, project, records, attachmentPath);
+                break;
+            case "retrycomment":
+                await UpdateComments(client, organization, project, records, attachmentPath);
+                break;
+            default:
+                Console.WriteLine("Invalid type specified. Use 'epic', 'feature', 'bug', 'release' or 'chore'.");
+                break;
         }
-
-        foreach (var epic in epics)
-        {
-            if (azurePTIds.Contains(epic.Id)) continue;
-
-            string epicId = await CreateWorkItem(client, organization, project, "Feature", epic, null, attachmentPath);
-            if (!string.IsNullOrEmpty(epicId)) 
-            {
-                Console.WriteLine($"Feature - '{epic.Title}' created with ID - {epicId}");
-                processedCount++;
-            }
-
-            var childItems = workItems.Where(w => Normalize(w.Labels) == Normalize(epic.Title) && !w.Type.Equals("Chore", StringComparison.OrdinalIgnoreCase)).OrderBy(f => f.CreatedAt).ToList();
-
-            foreach (var child in childItems)
-            {
-                if (azurePTIds.Contains(child.Id)) continue;
-
-                string childId = await CreateWorkItem(client, organization, project, MapWorkItemType(child.Type), child, epicId, attachmentPath);
-
-                if (!string.IsNullOrEmpty(childId))
-                {
-                    Console.WriteLine($"{MapWorkItemType(child.Type)} created under Epic '{epic.Title}'");
-                    processedCount++;
-                }
-            }
-        }
-
-        if (chores.Any())
-        {
-            choreParentFeatureId = await CreateChoreParentFeature(client, organization, project);
-
-            foreach (var chore in chores)
-            {
-                if (azurePTIds.Contains(chore.Id)) continue;
-
-                string choreId = await CreateWorkItem(client, organization, project, "User Story", chore, choreParentFeatureId, attachmentPath);
-                if (!string.IsNullOrEmpty(choreId))
-                {
-                    Console.WriteLine($"Chore '{chore.Title}' linked to Chore Parent Feature");
-                    processedCount++;
-                }
-            }
-        }
-
-        Console.WriteLine($"{processedCount} items processed successfully of {records.Count} rows.");
     }
 
     #region Create Workitems
-    
-    private static async Task<string> CreateChoreParentFeature(HttpClient client, string organization, string project)
+
+    private static async Task ProcessEpics(HttpClient client, string organization, string project, List<WorkItem> records, string attachmentPath)
     {
-        string url = $"https://dev.azure.com/{organization}/{project}/_apis/wit/workitems/$Feature?api-version=7.1";
-        var requestBody = new List<object>
-        {
-            new { op = "add", path = "/fields/System.Title", value = "Chore Parent Feature" },
-            new { op = "add", path = "/fields/System.Description", value = "This feature contains all Chore items" }
-        };
+        Console.WriteLine($"Do you want to sync board: {project}? Press enter to continue.");
+        string input = Console.ReadLine();
 
-        var content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json-patch+json");
-        var response = await client.PostAsync(url, content);
-
-        if (!response.IsSuccessStatusCode)
+        if (!string.IsNullOrEmpty(input))
         {
-            LogError($"❌ [ERROR] Failed to create Chore Parent Feature.");
-            return null;
+            Console.WriteLine("Aborting process.");
+            return;
         }
 
-        var responseBody = await response.Content.ReadAsStringAsync();
-        var json = JsonDocument.Parse(responseBody);
-        int responseId = json.RootElement.GetProperty("id").GetInt32();
-        return responseId.ToString();
+        List<WorkItem> allItems = records
+                                 .Where(r => (r.Type.Equals("epic", StringComparison.OrdinalIgnoreCase) ||
+                                             r.Type.Equals("bug", StringComparison.OrdinalIgnoreCase) ||
+                                             r.Type.Equals("feature", StringComparison.OrdinalIgnoreCase) ||
+                                             r.Type.Equals("chore", StringComparison.OrdinalIgnoreCase)))
+                                 .OrderBy(r => r.Type.Equals("epic", StringComparison.OrdinalIgnoreCase) ? 0 : 1) // Epics first
+                                 .ThenBy(f => f.CreatedAt)
+                                 .ToList();
+        totalWorkItemCount = allItems.Count;
+        //Create Parent Chore Featurw -> Use that feature for linking all chore items.
+        string choreFeatureTitle = "Chore Parent Feature";
+        WorkItem choreFeature = new WorkItem
+        {
+            Title = choreFeatureTitle,
+            Type = "feature"
+        };
+
+        string choreFeatureId = await CreateWorkItem(client, organization, project, "Feature", choreFeature, null, attachmentPath);
+        if (!string.IsNullOrEmpty(choreFeatureId))
+            Console.WriteLine($"Chore Parent Feature created with ID: {choreFeatureId}");
+
+        foreach (var item in allItems)
+        {
+            if (processedIds.Contains(item.Id))
+                continue;
+            if (item.Type.Equals("epic"))
+            {
+                string epicId = await CreateWorkItem(client, organization, project, MapWorkItemType(item.Type), item, null, attachmentPath);
+                if (!string.IsNullOrEmpty(epicId))
+                {
+                    processedIds.Add(item.Id);
+                    processedCount++;
+                    string message = $"{MapWorkItemType(item.Type)} - {item.Id} - created with ID :{epicId} | [{processedCount}/{allItems.Count}]";
+                    Console.WriteLine(message);
+                    LogError(message);
+                    epicDict.Add(item.Labels.Trim().ToLower(), epicId);
+                    continue;
+                }
+            }
+
+            // First creating all the epics as "Feature" sort by CreatedAt ASC then attach the "Feature" while creating "User Stories" and "Bugs" based on CreatedAt ASC.
+            // Find the epic id based on first lable if it has comma and set epicWorkId
+            // Add label as tags in userstory or bugs
+            // For bugs there is not description, it's system info , so we need to update description in system info
+
+            string epicWorkId = null;
+
+            //if item.type = "chore" -> epicWorkId = chore's parent id
+            if (item.Type.Equals("chore"))
+            {
+                epicWorkId = choreFeatureId;
+            }
+
+            if (!string.IsNullOrEmpty(item.Labels) && item.Type != "chore")
+            {
+                var firstLabel = item.Labels.Split(',').FirstOrDefault()?.Trim().ToLower();
+                if (!string.IsNullOrEmpty(firstLabel) && epicDict.TryGetValue(firstLabel, out var foundEpicId))
+                {
+                    epicWorkId = foundEpicId;
+                }
+            }
+
+            string workItemId = await CreateWorkItem(client, organization, project, MapWorkItemType(item.Type), item, epicWorkId, attachmentPath);
+            if (!string.IsNullOrEmpty(workItemId))
+            {
+                processedIds.Add(item.Id);
+                processedCount++;
+                if (!string.IsNullOrEmpty(epicWorkId))
+                {
+                    string message = $"{MapWorkItemType(item.Type)} - {item.Id} - created under EpicID - {epicWorkId} | [{processedCount}/{allItems.Count}]";
+                    Console.WriteLine(message);
+                    LogError(message);
+                }
+                else
+                {
+                    string message = $"{MapWorkItemType(item.Type)} - {item.Id} - created under No Epic | [{processedCount}/{allItems.Count}]";
+                    Console.WriteLine(message);
+                    LogError(message);
+                }
+            }
+            else
+            {
+                var failedItem = new FailedWorkItem
+                {
+                    Id = item.Id,
+                    ParentId = epicWorkId,
+                    Type = item.Type,
+                    Title = item.Title,
+                    Labels = item.Labels,
+                    Description = item.Description,
+                    Estimate = item.Estimate,
+                    Priority = item.Priority,
+                    CurrentState = item.CurrentState,
+                    Comment = item.Comment,
+                    CreatedAt = item.CreatedAt,
+                    AcceptedAt = item.AcceptedAt,
+                    Deadline = item.Deadline,
+                    OwnedBy1 = item.OwnedBy1,
+                    OwnedBy2 = item.OwnedBy2,
+                    Comments = item.Comments ?? new List<string>(),
+                    Reason = "Work item creation failed."
+                };
+                failedWorkItems.Add(failedItem);
+                LogError($"[FAILED] Failed to create {item.Type}- {item.Id}: {item.Title}");
+            }
+        }
+
+        #region Comment
+        //var unprocessedRecords = records
+        //      .Where(r => !processedIds.Contains(r.Id) && (r.Type.Equals("bug", StringComparison.OrdinalIgnoreCase) || r.Type.Equals("feature", StringComparison.OrdinalIgnoreCase)))
+        //      .OrderBy(r => r.CreatedAt)
+        //      .ToList();
+
+        //foreach (var ptItem in unprocessedRecords)
+        //{
+        //    string workItemId = await CreateWorkItem(client, organization, project, MapWorkItemType(ptItem.Type), ptItem, null, attachmentPath);
+
+        //    if (!string.IsNullOrEmpty(workItemId))
+        //    {
+        //        processedIds.Add(ptItem.Id);
+        //        processedCount++;
+        //        Console.WriteLine($"{MapWorkItemType(ptItem.Type)} - created under No Epic | [{processedCount}/{records.Count}]");
+        //    }
+        //    else
+        //    {
+        //        LogError($"[FAILED] Failed to create {ptItem.Type}: {ptItem.Title}");
+        //    }
+        //}
+        #endregion
+
+        Console.WriteLine($"{processedCount} work items processed successfully of {allItems.Count} records.");
+
+        SaveFailedItemsToJson(failedWorkItems);
+        await RetryFailedWorkItems(client, organization, project, attachmentPath);
     }
 
-    private static async Task<string> CreateWorkItem(HttpClient client, string organization, string project, string type, WorkItem workItem, string parentId = null, string attachmentPath = null)
+    private static async Task ProcessReleases(HttpClient client, string organization, string project, List<WorkItem> records, string attachmentPath)
     {
+        Console.WriteLine($"Do you want to sync board: {project}? Press enter to continue.");
+        string input = Console.ReadLine();
+
+        if (!string.IsNullOrEmpty(input))
+        {
+            Console.WriteLine("Aborting process.");
+            return;
+        }
+
+        var releaseItems = records.Where(r => r.Type.Equals("release", StringComparison.OrdinalIgnoreCase)).ToList();
+
+        foreach (var record in releaseItems)
+        {
+            if (processedIds.Contains(record.Id))
+                continue;
+
+            string releaseId = await CreateWorkItem(client, organization, project, "Release", record, null, attachmentPath);
+
+            if (!string.IsNullOrEmpty(releaseId))
+            {
+                processedCount++;
+                string message = $"{record.Id} - Created Release with AzureID : {releaseId} | [{processedCount}/{releaseItems.Count}]";
+                Console.WriteLine(message);
+                LogError(message);
+                processedIds.Add(record.Id);
+            }
+            else
+            {
+                var failedItem = new FailedWorkItem
+                {
+                    Id = record.Id,
+                    Type = record.Type,
+                    Title = record.Title,
+                    Labels = record.Labels,
+                    Description = record.Description,
+                    Estimate = record.Estimate,
+                    Priority = record.Priority,
+                    CurrentState = record.CurrentState,
+                    Comment = record.Comment,
+                    CreatedAt = record.CreatedAt,
+                    AcceptedAt = record.AcceptedAt,
+                    Deadline = record.Deadline,
+                    OwnedBy1 = record.OwnedBy1,
+                    OwnedBy2 = record.OwnedBy2,
+                    Comments = record.Comments ?? new List<string>(),
+                    Reason = "Work item creation failed."
+                };
+                failedWorkItems.Add(failedItem);
+                LogError($"Failed to create Release {record.Id}: {record.Title}");
+            }
+        }
+
+        SaveFailedItemsToJson(failedWorkItems);
+        Console.WriteLine($"{processedCount} Release work items created of {releaseItems.Count}");
+    }
+
+    public static List<string> azureUsers = new List<string>();
+    private static async Task<string> CreateWorkItem(HttpClient client, string organization, string project, string type, WorkItem workItem, string pkParentId = null, string attachmentPath = null)
+    {
+        string url = string.Empty;
+        var responseBody = string.Empty;
         try
         {
-            List<string> azureUsers = await GetAzureDevOpsUsers(client, organization, project);
-            string url = $"https://dev.azure.com/{organization}/{project}/_apis/wit/workitems/${type}?api-version=7.1";
+            if (azureUsers.Count == 0)
+            {
+                azureUsers = await GetAzureDevOpsUsers(client, organization, project);
+            }
+            url = $"https://dev.azure.com/{organization}/{project}/_apis/wit/workitems/${type}?api-version=7.1";
+            string truncatedTitle = string.IsNullOrWhiteSpace(workItem.Title) ? "Untitled Work Item" :
+                        workItem.Title.Length > 255 ? workItem.Title.Substring(0, 255) : workItem.Title;
+
             var requestBody = new List<object>
             {
-                new { op = "add", path = "/fields/System.Title", value = workItem.Title },
-                new { op = "add", path = "/fields/Custom.PTStory", value = workItem.Id }
+                new { op = "add", path = "/fields/System.Title", value = truncatedTitle }
             };
 
-            if (!string.IsNullOrEmpty(workItem.Description))
+            if (!string.IsNullOrEmpty(workItem.Id))
+            {
+                requestBody.Add(new { op = "add", path = "/fields/Custom.PTStory", value = workItem.Id });
+            }
+
+            if (workItem.Type.Equals("chore", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrEmpty(workItem.Labels))
+                {
+                    workItem.Labels = "chore";
+                }
+                else
+                {
+                    var labelList = string.Join(";", workItem.Labels.Split(',').Select(tag => tag.Trim()));
+                    workItem.Labels = labelList;
+                }
+
+                requestBody.Add(new { op = "add", path = "/fields/System.Tags", value = workItem.Labels });
+            }
+            else if (!string.IsNullOrEmpty(workItem.Labels) && (type.Equals("user story", StringComparison.OrdinalIgnoreCase) || type.Equals("bug", StringComparison.OrdinalIgnoreCase)))
+            {
+                string tags = string.Join(";", workItem.Labels.Split(',').Select(tag => tag.Trim()));
+                requestBody.Add(new { op = "add", path = "/fields/System.Tags", value = tags });
+            }
+
+            if (workItem.Type.Equals("bug", StringComparison.OrdinalIgnoreCase))
             {
                 string htmlDescription = $"<pre><code>{System.Net.WebUtility.HtmlEncode(workItem.Description)}</code></pre>";
-
+                requestBody.Add(new
+                {
+                    op = "add",
+                    path = "/fields/Microsoft.VSTS.TCM.SystemInfo",
+                    value = htmlDescription
+                });
+            }
+            else if (!string.IsNullOrEmpty(workItem.Description))
+            {
+                string htmlDescription = $"<pre><code>{System.Net.WebUtility.HtmlEncode(workItem.Description)}</code></pre>";
                 requestBody.Add(new
                 {
                     op = "add",
@@ -155,7 +339,7 @@ class Program
                 requestBody.Add(new { op = "add", path = "/fields/Microsoft.VSTS.Common.Priority", value = MapPriority(workItem.Priority) });
             }
 
-            if (!string.IsNullOrEmpty(parentId))
+            if (!string.IsNullOrEmpty(pkParentId))
             {
                 requestBody.Add(new
                 {
@@ -164,14 +348,14 @@ class Program
                     value = new
                     {
                         rel = "System.LinkTypes.Hierarchy-Reverse",
-                        url = $"https://dev.azure.com/{organization}/{project}/_apis/wit/workitems/{parentId}"
+                        url = $"https://dev.azure.com/{organization}/{project}/_apis/wit/workitems/{pkParentId}"
                     }
                 });
             }
 
             if (workItem.Estimate.HasValue)
             {
-                requestBody.Add(new { op = "add", path = "/fields/Microsoft.VSTS.Scheduling.Effort", value = workItem.Estimate.Value });
+                requestBody.Add(new { op = "add", path = "/fields/Microsoft.VSTS.Scheduling.StoryPoints", value = workItem.Estimate.Value });
             }
 
             if (workItem.AcceptedAt.HasValue)
@@ -201,17 +385,22 @@ class Program
                 requestBody.Add(new { op = "add", path = "/fields/System.AssignedTo", value = assignedTo });
             }
 
+            if (!string.IsNullOrEmpty(workItem.RequestedBy))
+            {
+                requestBody.Add(new { op = "add", path = "/fields/Custom.RequestedBy", value = workItem.RequestedBy });
+            }
+
             var content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json-patch+json");
             var response = await client.PostAsync(url, content);
 
             if (!response.IsSuccessStatusCode)
             {
-                string errorMessage = $"Failed to create {type} '{workItem.Title}'. Status: {response.StatusCode}";
+                string errorMessage = $"[FAILED] Failed to create {type} '{workItem.Id}'. Status: {response.StatusCode}";
                 LogError(errorMessage);
                 return null;
             }
 
-            var responseBody = await response.Content.ReadAsStringAsync();
+            responseBody = await response.Content.ReadAsStringAsync();
             var json = JsonDocument.Parse(responseBody);
             int responseId = json.RootElement.GetProperty("id").GetInt32();
 
@@ -222,21 +411,32 @@ class Program
             }
 
             // **Step 2: Check Parent State After Updating Child**
-            if (!string.IsNullOrEmpty(parentId))
+            if (!string.IsNullOrEmpty(pkParentId))
             {
-                await UpdateParentState(client, organization, project, parentId);
+                await UpdateParentState(client, organization, project, pkParentId);
             }
 
-            await ProcessCommemnts(client, organization, project, responseId.ToString(), workItem.Comments);
-            await ProcessAttachments(client, organization, project,responseId.ToString(), workItem.Id, attachmentPath);
+            await ProcessComments(client, organization, project, responseId.ToString(), workItem.Comments);
+            await ProcessAttachments(client, organization, project, responseId.ToString(), attachmentPath, workItem.Id);
 
             return responseId.ToString();
         }
+        catch (HttpRequestException httpEx)
+        {
+            LogError($"[HTTP ERROR] Failed to communicate with Azure DevOps API - {httpEx.Message}. " +
+                     $"WorkItem ID: {workItem.Id}, Type: {type}");
+        }
+        catch (JsonException jsonEx)
+        {
+            LogError($"[JSON ERROR] Failed to parse response for WorkItem ID: {workItem.Id}, Type: {type}. " +
+                     $"Error: {jsonEx.Message}, Response Content: {responseBody}");
+        }
         catch (Exception ex)
         {
-            LogError($"Exception while creating {type} '{workItem.Title}': {ex.Message}");
-            return null;
+            LogError($"[ERROR] Exception - {ex.Message}, StackTrace: {ex.StackTrace}, " +
+                     $"Type: {type}, WorkItem ID: {workItem.Id}");
         }
+        return null;
     }
 
     #endregion
@@ -258,10 +458,7 @@ class Program
         JsonDocument json = JsonDocument.Parse(responseBody);
 
         if (!json.RootElement.TryGetProperty("relations", out JsonElement relations))
-        {
-            LogError($"[INFO] Work item {parentId} has no child items.");
             return;
-        }
 
         bool anyActiveChild = false;
         bool allClosed = true;
@@ -332,7 +529,7 @@ class Program
 
         if (!response.IsSuccessStatusCode)
         {
-            LogError($"[ERROR] Failed to update work item {workItemId} to state '{newState}'. Status: {response.StatusCode}");
+            LogError($"[FAILED] Failed to update work item {workItemId} to state '{newState}'. Status: {response.StatusCode}");
         }
     }
 
@@ -357,15 +554,13 @@ class Program
 
     #region Attach Comments & Attachments
 
-    static async Task ProcessCommemnts(HttpClient client, string organization, string project, string workItemId, List<string> comments)
+    static async Task ProcessComments(HttpClient client, string organization, string project, string workItemId, List<string> comments)
     {
+        List<FailedWorkItem> failedItemsToAddComment = new List<FailedWorkItem>();
         string url = $"https://dev.azure.com/{organization}/{project}/_apis/wit/workitems/{workItemId}?api-version=7.1";
 
         if (comments == null || comments.Count == 0)
-        {
-            LogError($"[INFO] No comments provided to {workItemId}");
             return;
-        }
 
         foreach (var comment in comments)
         {
@@ -384,14 +579,30 @@ class Program
 
             if (!response.IsSuccessStatusCode)
             {
-                LogError($"Exception while adding comment - {formattedComment} of Work Item {workItemId}");
+                LogError($"[FAILED] while adding comment - {formattedComment} of WorkItemID - {workItemId}");
+
+                failedItemsToAddComment.Add(new FailedWorkItem
+                {
+                    Id = workItemId,
+                    FailedType = "Comment",
+                    Comment = formattedComment,
+                    Reason = response.ReasonPhrase
+                });
                 return;
             }
         }
+        if (failedItemsToAddComment.Count > 0)
+        {
+            SaveFailedItemsToJson(failedItemsToAddComment);
+        }
     }
 
-    static async Task ProcessAttachments(HttpClient client, string organization, string project, string pkId, string workItemId, string baseFolderPath)
+    static async Task ProcessAttachments(HttpClient client, string organization, string project, string pkId, string baseFolderPath, string workItemId = null)
     {
+        List<FailedWorkItem> failedAttachItems = new List<FailedWorkItem>();
+        if (string.IsNullOrEmpty(workItemId))
+            return;
+
         string workItemFolder = Path.Combine(baseFolderPath, workItemId);
 
         if (Directory.Exists(workItemFolder))
@@ -400,28 +611,38 @@ class Program
 
             foreach (string file in files)
             {
-                string attachmentUrl = await UploadAttachment(client, organization, project, file);
+                string attachmentUrl = await UploadAttachment(client, organization, project, file, pkId);
 
                 if (!string.IsNullOrEmpty(attachmentUrl))
                 {
                     bool success = await AttachFileToWorkItem(client, organization, project, pkId, attachmentUrl);
                     if (!success)
                     {
-                        LogError($"Failed to attach {file} to Work Item {pkId}");
+                        string errorMessage = $"Failed to attach {file} to Work Item {pkId}";
+                        LogError(errorMessage);
+                        failedAttachItems.Add(new FailedWorkItem
+                        {
+                            Id = pkId,
+                            FailedType = "Attachment",
+                            Comment = file,
+                            Reason = errorMessage
+                        });
                         return;
                     }
                 }
             }
         }
-        else
+        if (failedAttachItems.Count > 0)
         {
-            LogError($"[INFO] No attachments found for Work Item {pkId}");
+            SaveFailedItemsToJson(failedAttachItems);
         }
     }
 
-    static async Task<string> UploadAttachment(HttpClient client, string organization, string project, string filePath)
+    static async Task<string> UploadAttachment(HttpClient client, string organization, string project, string filePath, string pkId = null)
     {
-        string url = $"https://dev.azure.com/{organization}/{project}/_apis/wit/attachments?fileName={Path.GetFileName(filePath)}&api-version=7.1";
+        List<FailedWorkItem> failedUploadItems = new List<FailedWorkItem>();
+        string encodedFileName = Uri.EscapeDataString(Path.GetFileName(filePath));
+        string url = $"https://dev.azure.com/{organization}/{project}/_apis/wit/attachments?fileName={encodedFileName}&api-version=7.1";
 
         byte[] fileBytes = File.ReadAllBytes(filePath);
         using (var content = new ByteArrayContent(fileBytes))
@@ -437,7 +658,18 @@ class Program
             }
             else
             {
-                LogError($"Failed to upload file {filePath}: {response.ReasonPhrase}");
+                string errorMessage = $"Failed to upload file {filePath}: {response.ReasonPhrase}";
+                LogError(errorMessage);
+
+                failedUploadItems.Add(new FailedWorkItem
+                {
+                    Id = pkId ?? "",
+                    FailedType = "Attachment",
+                    AttachmentPath = filePath,
+                    Reason = errorMessage
+                });
+
+                SaveFailedItemsToJson(failedUploadItems);
                 return null;
             }
         }
@@ -462,46 +694,6 @@ class Program
 
     #region Azure[GET]
 
-    static async Task<List<string>> GetAzurePTStoryValues(HttpClient client, string organization, string project)
-    {
-        List<string> ptStoryValues = new List<string>();
-        string url = $"https://dev.azure.com/{organization}/{project}/_apis/wit/wiql?api-version=7.1";
-
-        var query = new
-        {
-            query = "SELECT * FROM WorkItems"
-        };
-
-        var content = new StringContent(JsonSerializer.Serialize(query), Encoding.UTF8, "application/json");
-        HttpResponseMessage response = await client.PostAsync(url, content);
-
-        if (response.IsSuccessStatusCode)
-        {
-            string responseBody = await response.Content.ReadAsStringAsync();
-            JsonDocument json = JsonDocument.Parse(responseBody);
-
-            if (json.RootElement.TryGetProperty("workItems", out JsonElement workItems))
-            {
-                foreach (var workItem in workItems.EnumerateArray())
-                {
-                    string workItemId = workItem.GetProperty("id").ToString();
-                    string ptStoryValue = await GetWorkItemField(client, organization, project, workItemId, "Custom.PTStory");
-
-                    if (!string.IsNullOrEmpty(ptStoryValue))
-                    {
-                        ptStoryValues.Add(ptStoryValue);
-                    }
-                }
-            }
-        }
-        else
-        {
-            Console.WriteLine($"[ERROR] Failed to fetch PT Story work items. Status Code: {response.StatusCode}");
-        }
-
-        return ptStoryValues;
-    }
-
     static async Task<List<string>> GetAzureDevOpsUsers(HttpClient client, string organization, string project)
     {
         string url = $"https://vssps.dev.azure.com/{organization}/_apis/graph/users?api-version=7.1-preview.1";
@@ -523,29 +715,179 @@ class Program
         }
     }
 
-    static async Task<string> GetWorkItemField(HttpClient client, string organization, string project, string workItemId, string fieldName)
+    #endregion
+
+    #region Update Azure Tickets
+    private static async Task UpdateAzureTickets(HttpClient client, string organization, string project, List<WorkItem> csvRecords, string attachmentPath)
     {
-        string url = $"https://dev.azure.com/{organization}/{project}/_apis/wit/workitems/{workItemId}?api-version=7.1";
-
-        HttpResponseMessage response = await client.GetAsync(url);
-
-        if (response.IsSuccessStatusCode)
+        Console.WriteLine($"Do you want to sync board: {project}? Press enter to continue.");
+        string input = Console.ReadLine();
+        if (!string.IsNullOrEmpty(input))
         {
-            string responseBody = await response.Content.ReadAsStringAsync();
-            JsonDocument json = JsonDocument.Parse(responseBody);
+            Console.WriteLine("Aborting process.");
+            return;
+        }
 
-            if (json.RootElement.TryGetProperty("fields", out JsonElement fields) &&
-                fields.TryGetProperty(fieldName, out JsonElement fieldValue))
+        var config = LoadConfiguration();
+        string existingAzureIDPath = config["FilePaths:ExistAzureIDPath"];
+        Dictionary<string, string> ptStoryToIdMap = new();
+        using (var reader = new StreamReader(existingAzureIDPath))
+        using (var csv = new CsvReader(reader, new CsvConfiguration(CultureInfo.InvariantCulture)))
+        {
+            var records = csv.GetRecords<dynamic>().ToList();
+            foreach (var record in records)
             {
-                return fieldValue.ToString();
+                string id = record.ID;
+                string ptStory = record.PTStory;
+
+                if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(ptStory))
+                {
+                    ptStoryToIdMap[ptStory] = id;
+                }
             }
         }
-        else
+
+        var excludedTypes = new[] { "epic", "release" };
+        var recordsToProcess = csvRecords.Where(x => !excludedTypes.Contains(x.Type, StringComparer.OrdinalIgnoreCase)).ToList();
+        int successCount = 0;
+
+        foreach (var record in recordsToProcess)
         {
-            Console.WriteLine($"[ERROR] Failed to fetch work item {workItemId}. Status Code: {response.StatusCode}");
+            if (record.Estimate == null) continue;
+
+            if (!ptStoryToIdMap.TryGetValue(record.Id, out string azureId))
+            {
+                Console.WriteLine($"No Azure ID found for PTStory: {record.Id}");
+                continue;
+            }
+
+            var updatePayload = new List<object>();
+            if (!string.IsNullOrEmpty(record.RequestedBy))
+            {
+                updatePayload.Add(new { op = "add", path = "/fields/Custom.RequestedBy", value = record.RequestedBy });
+            }
+
+            if (!string.IsNullOrEmpty(record.Priority))
+            {
+                updatePayload.Add(new { op = "add", path = "/fields/Microsoft.VSTS.Common.Priority", value = MapPriority(record.Priority) });
+            }
+
+            if (record.Estimate.HasValue)
+            {
+                updatePayload.Add(new { op = "add", path = "/fields/Microsoft.VSTS.Scheduling.StoryPoints", value = record.Estimate });
+            }
+
+            if (record.Type.Equals("chore", StringComparison.OrdinalIgnoreCase))
+            {
+                string tags;
+
+                if (string.IsNullOrEmpty(record.Labels))
+                {
+                    tags = "chore";
+                }
+                else
+                {
+                    var labelList = string.Join(";", record.Labels.Split(',').Select(tag => tag.Trim()));
+                    tags = labelList;
+                }
+
+                updatePayload.Add(new { op = "add", path = "/fields/System.Tags", value = tags });
+            }
+
+            var content = new StringContent(JsonSerializer.Serialize(updatePayload), Encoding.UTF8, "application/json-patch+json");
+            var response = await client.PatchAsync($"https://dev.azure.com/{organization}/{project}/_apis/wit/workitems/{azureId}?api-version=7.0", content);
+
+            if (response.IsSuccessStatusCode)
+            {
+                successCount++;
+                Console.WriteLine($"{MapWorkItemType(record.Type)} updated for ID - {record.Id} with Azure ID : {azureId} | [{successCount}/{recordsToProcess.Count}]");
+            }
+            else
+            {
+                Console.WriteLine($"Failed to update ID - {record.Id} with Azure ID : {azureId}");
+            }
         }
 
-        return null;
+        Console.WriteLine($"{successCount} record's Story Points updated successfully.");
+    }
+
+    private static async Task UpdateComments(HttpClient client, string organization, string project, List<WorkItem> csvRecords, string attachmentPath)
+    {
+        Console.WriteLine($"Do you want to sync board: {project}? Press enter to continue.");
+        string input = Console.ReadLine();
+        if (!string.IsNullOrEmpty(input))
+        {
+            Console.WriteLine("Aborting process.");
+            return;
+        }
+
+        var config = LoadConfiguration();
+        string existingAzureIDPath = config["FilePaths:ExistAzureIDPath"];
+
+        Dictionary<string, string> ptStoryToIdMap = new();
+        using (var reader = new StreamReader(existingAzureIDPath))
+        using (var csv = new CsvReader(reader, new CsvConfiguration(CultureInfo.InvariantCulture)))
+        {
+            var records = csv.GetRecords<dynamic>().ToList();
+            foreach (var record in records)
+            {
+                string id = record.ID;
+                string ptStory = record.PTStory;
+
+                if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(ptStory))
+                {
+                    ptStoryToIdMap[ptStory] = id;
+                }
+            }
+        }
+
+        string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
+        DirectoryInfo? directory = new DirectoryInfo(baseDirectory);
+        while (directory != null && directory.Name != "AzureEPIC")
+        {
+            directory = directory.Parent;
+        }
+
+        string projectRoot = directory?.FullName ?? baseDirectory;
+        string logDirectory = Path.Combine(projectRoot, "Log");
+        string jsonFilePath = Path.Combine(logDirectory, "FailedWorkItems.json");
+        if (!File.Exists(jsonFilePath))
+        {
+            Console.WriteLine("No failed work items found for retry.");
+            return;
+        }
+
+        string jsonData = File.ReadAllText(jsonFilePath);
+        List<FailedWorkItem> failedItems = JsonSerializer.Deserialize<List<FailedWorkItem>>(jsonData) ?? new List<FailedWorkItem>();
+        if (!failedItems.Any())
+        {
+            Console.WriteLine("No failed work items found for retry.");
+            return;
+        }
+
+        List<FailedWorkItem> retryFailures = new List<FailedWorkItem>();
+        foreach (var item in failedItems)
+        {
+            if (!ptStoryToIdMap.TryGetValue(item.Id, out string azureId))
+            {
+                Console.WriteLine($"No Azure ID found for PTStory: {item.Id}");
+                continue;
+            }
+
+            try
+            {
+                await ProcessComments(client, organization, project, azureId, item.Comments);
+                processedCount++;
+                int totalProcessed = totalWorkItemCount + failedItems.Count;
+                Console.WriteLine($"Success: ID: {item.Id} - Comments added to Work Item {azureId} | [{processedCount}/{totalProcessed}]");
+            }
+            catch (Exception ex)
+            {
+                item.Reason = ex.Message;
+                retryFailures.Add(item);
+                LogError($"[Error] Failed to update comments for Work Item {azureId}: {ex.Message}");
+            }
+        }
     }
 
     #endregion
@@ -589,6 +931,7 @@ class Program
                 Deadline = csv.GetField<DateTime?>("Deadline"),
                 OwnedBy1 = csv.GetField("OwnedBy1"),
                 OwnedBy2 = csv.GetField("OwnedBy2"),
+                RequestedBy = csv.GetField("RequestedBy"),
                 Comments = headerRow.Where(col => col.StartsWith("Comment")).Select(col => csv.GetField(col)).Where(value => !string.IsNullOrEmpty(value)).ToList()
             };
             records.Add(workItem);
@@ -612,7 +955,8 @@ class Program
 
     static string Normalize(string text)
     {
-        return string.IsNullOrWhiteSpace(text) ? null : new string(text.Where(c => !char.IsPunctuation(c)).ToArray()).Trim().ToLowerInvariant();
+        string result = string.IsNullOrWhiteSpace(text) ? null : new string(text.Where(c => !char.IsPunctuation(c)).ToArray()).Trim().ToLowerInvariant();
+        return result;
     }
 
     static string MapWorkItemType(string type)
@@ -632,7 +976,7 @@ class Program
     static int MapPriority(string priority)
     {
         if (string.IsNullOrWhiteSpace(priority))
-            return 4; // Default to 'Low' priority (4)
+            return 4; // Default to 'none' priority (4)
 
         // Extract priority text
         string[] parts = priority.Split('-');
@@ -642,10 +986,10 @@ class Program
 
             var priorityMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
             {
-                { "Low", 4 },
-                { "Medium", 3 },
-                { "High", 2 },
-                { "Critical", 2 }
+                { "High", 1 },
+                { "Medium", 2 },
+                { "Low", 3 },
+                { "none", 4 }
             };
 
             return priorityMap.TryGetValue(priorityText, out int mappedValue) ? mappedValue : 4;
@@ -708,6 +1052,144 @@ class Program
     }
 
     #endregion
+
+    #region Failed Items
+
+    private static void SaveFailedItemsToJson(List<FailedWorkItem> failedItems)
+    {
+        string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
+
+        DirectoryInfo? directory = new DirectoryInfo(baseDirectory);
+        while (directory != null && directory.Name != "AzureEPIC")
+        {
+            directory = directory.Parent;
+        }
+
+        string projectRoot = directory?.FullName ?? baseDirectory;
+        string logDirectory = Path.Combine(projectRoot, "Log");
+
+        if (!Directory.Exists(logDirectory))
+        {
+            Directory.CreateDirectory(logDirectory);
+        }
+
+        string jsonFilePath = Path.Combine(logDirectory, "FailedWorkItems.json");
+
+        try
+        {
+            List<FailedWorkItem> existingFailedItems = new List<FailedWorkItem>();
+
+            if (File.Exists(jsonFilePath))
+            {
+                string existingJson = File.ReadAllText(jsonFilePath);
+                if (!string.IsNullOrWhiteSpace(existingJson))
+                {
+                    existingFailedItems = JsonSerializer.Deserialize<List<FailedWorkItem>>(existingJson) ?? new List<FailedWorkItem>();
+                }
+            }
+
+            existingFailedItems.AddRange(failedItems);
+
+            string json = JsonSerializer.Serialize(existingFailedItems, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(jsonFilePath, json);
+        }
+        catch (Exception ex)
+        {
+            LogError($"[ERROR] Error writing failed work items to JSON: {ex.Message}");
+        }
+    }
+
+    private static async Task RetryFailedWorkItems(HttpClient client, string organization, string project, string attachmentPath)
+    {
+        string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
+
+        DirectoryInfo? directory = new DirectoryInfo(baseDirectory);
+        while (directory != null && directory.Name != "AzureEPIC")
+        {
+            directory = directory.Parent;
+        }
+
+        string projectRoot = directory?.FullName ?? baseDirectory;
+        string logDirectory = Path.Combine(projectRoot, "Log");
+        string jsonFilePath = Path.Combine(logDirectory, "FailedWorkItems.json");
+
+        if (!File.Exists(jsonFilePath))
+        {
+            Console.WriteLine("No failed work items found for retry.");
+            return;
+        }
+
+        string jsonData = File.ReadAllText(jsonFilePath);
+        List<FailedWorkItem> failedItems = JsonSerializer.Deserialize<List<FailedWorkItem>>(jsonData) ?? new List<FailedWorkItem>();
+
+        if (!failedItems.Any())
+        {
+            Console.WriteLine("No failed work items found for retry.");
+            return;
+        }
+
+        List<FailedWorkItem> retryFailures = new List<FailedWorkItem>();
+
+        foreach (var item in failedItems)
+        {
+            if (item.FailedType == "Attachment")
+            {
+                string attachmentUrl = await UploadAttachment(client, organization, project, item.AttachmentPath, item.Id);
+
+                if (!string.IsNullOrEmpty(attachmentUrl))
+                {
+                    Console.WriteLine($"[Retry Success] Attachment uploaded for {item.AttachmentPath}");
+                }
+                else
+                {
+                    item.Reason = "Retry failed.";
+                    retryFailures.Add(item);
+                    LogError($"[Retry Failed] Failed for attachment: {item.AttachmentPath}");
+                }
+            }
+            else if (item.FailedType == "Comment")
+            {
+                List<string> comments = new List<string> { item.Comment };
+                await ProcessComments(client, organization, project, item.Id, comments);
+            }
+            else
+            {
+                string workItemId = await CreateWorkItem(client, organization, project, MapWorkItemType(item.Type), new WorkItem
+                {
+                    Id = item.Id,
+                    Title = item.Title,
+                    Type = item.Type,
+                    Labels = item.Labels,
+                    Description = item.Description,
+                    Estimate = item.Estimate,
+                    Priority = item.Priority,
+                    CurrentState = item.CurrentState,
+                    Comment = item.Comment,
+                    CreatedAt = item.CreatedAt,
+                    AcceptedAt = item.AcceptedAt,
+                    Deadline = item.Deadline,
+                    OwnedBy1 = item.OwnedBy1,
+                    OwnedBy2 = item.OwnedBy2,
+                    Comments = item.Comments
+                }, item.ParentId, attachmentPath);
+
+                if (!string.IsNullOrEmpty(workItemId))
+                {
+                    processedCount++;
+                    int totalProcessed = totalWorkItemCount + failedItems.Count;
+                    Console.WriteLine($"Retry Success: {MapWorkItemType(item.Type)} - {item.Id} created with ID {workItemId} | [{processedCount}/{totalProcessed}]");
+                }
+                else
+                {
+                    item.Reason = "Retry Failed.";
+                    retryFailures.Add(item);
+                    LogError($"[Retry Failed] Failed for {item.FailedType}: {item.Id}");
+                }
+            }
+        }
+    }
+
+    #endregion
 }
 
 class WorkItem
@@ -726,5 +1208,35 @@ class WorkItem
     public DateTime? Deadline { get; set; }
     public string? OwnedBy1 { get; set; }
     public string? OwnedBy2 { get; set; }
+    public string? RequestedBy { get; set; }
     public List<string> Comments { get; set; } = new List<string>();
+}
+
+class FailedWorkItem
+{
+    public string? Reason { get; set; }
+    public string? AttachmentPath { get; set; }
+    public string? FailedType { get; set; }
+    public string? Id { get; set; }
+    public string? ParentId { get; set; }
+    public string? Type { get; set; }
+    public string? Title { get; set; }
+    public string? Labels { get; set; }
+    public string? Description { get; set; }
+    public double? Estimate { get; set; }
+    public string? Priority { get; set; }
+    public string? CurrentState { get; set; }
+    public string? Comment { get; set; }
+    public DateTime? CreatedAt { get; set; }
+    public DateTime? AcceptedAt { get; set; }
+    public DateTime? Deadline { get; set; }
+    public string? OwnedBy1 { get; set; }
+    public string? OwnedBy2 { get; set; }
+    public string? RequestedBy { get; set; }
+    public List<string> Comments { get; set; } = new List<string>();
+}
+class AzureItem
+{
+    public string Id { get; set; }
+    public string PTId { get; set; }
 }
