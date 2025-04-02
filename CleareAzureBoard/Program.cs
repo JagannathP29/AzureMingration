@@ -15,10 +15,18 @@ class Program
         string pat = config["AzureDevOps:PersonalAccessToken"];
 
         HttpClient client = new HttpClient();
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic",
-            Convert.ToBase64String(Encoding.ASCII.GetBytes($":{pat}")));
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.ASCII.GetBytes($":{pat}")));
 
-        List<string> workItemTypes = new List<string> {"Bug", "User Story", "Release", "Chore", "Feature", "Epic" };
+        Console.WriteLine($"Do you want to sync board: {project}? Press enter to continue.");
+        string input = Console.ReadLine();
+
+        if (!string.IsNullOrEmpty(input))
+        {
+            Console.WriteLine("Aborting process.");
+            return;
+        }
+
+        List<string> workItemTypes = new List<string> { "Bug", "User Story", "Release", "Chore", "Feature", "Epic" };
 
         foreach (var type in workItemTypes)
         {
@@ -28,14 +36,10 @@ class Program
 
     static async Task DeleteWorkItemsByType(HttpClient client, string organization, string project, string workItemType)
     {
-        Console.WriteLine($"Searching for {workItemType}s...");
+        Console.WriteLine($"Searching for {workItemType}s in project: {project}");
 
         string queryUrl = $"https://dev.azure.com/{organization}/{project}/_apis/wit/wiql?api-version=7.1-preview.2";
-        string queryJson = $@"
-        {{
-            ""query"": ""SELECT [System.Id] FROM WorkItems WHERE [System.WorkItemType] = '{workItemType}'""
-        }}";
-
+        string queryJson = $"{{\"query\": \"SELECT [System.Id] FROM WorkItems WHERE [System.WorkItemType] = '{workItemType}' AND [System.TeamProject] = '{project}'\"}}";
         var content = new StringContent(queryJson, Encoding.UTF8, "application/json");
         HttpResponseMessage response = await client.PostAsync(queryUrl, content);
 
@@ -51,7 +55,7 @@ class Program
 
         if (!root.TryGetProperty("workItems", out JsonElement workItems) || workItems.GetArrayLength() == 0)
         {
-            Console.WriteLine($"No {workItemType}s found.");
+            Console.WriteLine($"No {workItemType}s found in project {project}.");
             return;
         }
 
@@ -61,7 +65,7 @@ class Program
             workItemIds.Add(item.GetProperty("id").GetInt32());
         }
 
-        Console.WriteLine($"Found {workItemIds.Count} {workItemType}s. Deleting...");
+        Console.WriteLine($"Found {workItemIds.Count} {workItemType}s. Deleting from project {project}...");
 
         foreach (int id in workItemIds)
         {
